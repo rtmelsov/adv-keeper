@@ -1,0 +1,12 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    schema:
+      - "migrations/*_*.up.sql"
+    queries:
+      - "db/queries"
+    gen:
+      go:
+        package: "db"
+        out: "internal/db"
+        emit_pointers_for_null_types: true   # <- ключевая строка

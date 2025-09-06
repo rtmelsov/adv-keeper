@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package file.v1;
+option go_package = "github.com/rtmelsov/adv-keeper/gen/go/file/v1;filev1";
+
+service FileService {
+  // Клиент шлёт поток кусков, сервер в конце отвечает сводкой
+  rpc Upload(stream UploadRequest) returns (UploadResponse);
+}
+
+message UploadRequest {
+  oneof payload {
+    FileInfo info = 1;   // ПЕРВОЕ сообщение — мета-инфа
+    FileChunk chunk = 2; // Далее — куски файла
+  }
+}
+
+message FileInfo {
+  string filename = 1; // исходное имя (без путей)
+  int64  size     = 2; // опционально: общий размер
+}
+
+message FileChunk {
+  bytes  content = 1;   // данные куска (< 4 MiB — лимит gRPC на сообщение)
+  int64  offset  = 2;   // сдвиг от начала файла (полезно для резюмации)
+}
+
+message UploadResponse {
+  string stored_as      = 1; // путь/имя сохранённого файла на сервере
+  int64  bytes_received = 2; // сколько байт приняли
+  string sha256         = 3; // контрольная сумма принятого
+}
