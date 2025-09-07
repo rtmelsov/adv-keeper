@@ -1,0 +1,37 @@
+name: Deploy server
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.22' }
+      - run: |
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o dist/server ./cmd/server
+
+      - name: Upload & restart
+        env:
+          SSH_HOST: ${{ secrets.SERVER_HOST }}   # IP сервера
+          SSH_USER: ${{ secrets.SERVER_USER }}   # ak
+          SSH_KEY:  ${{ secrets.SERVER_SSH_KEY }}# приватный ed25519
+          DEST:     /opt/adv-keeper
+        run: |
+          sudo apt-get update && sudo apt-get install -y rsync
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+
+          ts=$(date +%Y%m%d%H%M%S)
+          rsync -e "ssh -i ~/.ssh/id_ed25519" -avz dist/server "$SSH_USER@$SSH_HOST:$DEST/releases/server-$ts"
+          ssh -i ~/.ssh/id_ed25519 "$SSH_USER@$SSH_HOST" bash -lc "
+            set -e
+            ln -sfn '$DEST/releases/server-$ts' '$DEST/current'
+            sudo systemctl restart adv-keeper
+            sudo systemctl --no-pager --full status adv-keeper || true
+            cd '$DEST/releases' && ls -t | tail -n +6 | xargs -r rm -f
+          "
