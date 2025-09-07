@@ -25,7 +25,13 @@ type FileServer struct {
 	uploadDir string
 }
 
-func New(q *db.Queries) *FileServer { return &FileServer{Q: q, uploadDir: "var/"} }
+func New(q *db.Queries) *FileServer {
+	filesDir := os.Getenv("FILES_DIR")
+	if filesDir == "" {
+		filesDir = "./data"
+	}
+	return &FileServer{Q: q, uploadDir: filesDir}
+}
 
 func (s *FileServer) Upload(stream filev1.FileService_UploadServer) error {
 	var (
