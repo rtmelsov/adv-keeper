@@ -2,10 +2,10 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
 	"google.golang.org/grpc/reflection"
 	"log"
 	"net"
+	"os"
 
 	commonv1 "github.com/rtmelsov/adv-keeper/gen/go/proto/common/v1"
 	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
@@ -18,12 +18,17 @@ import (
 )
 
 func main() {
+	dsn := os.Getenv("DB_DSN")
+	if dsn == "" {
+		log.Fatal("DB_DSN is required")
+	}
+	addr := os.Getenv("GRPC_ADDR")
+	if addr == "" {
+		addr = "127.0.0.1:8080"
+	}
 	// получаем урл бд
-	dsn := "postgres://postgres@localhost:5432/dbname?sslmode=disable"
 
-	fmt.Println("dsn", dsn)
-
-	lis, err := net.Listen("tcp", "127.0.0.1:8080")
+	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatal(err)
 	}
