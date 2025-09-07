@@ -11,7 +11,6 @@ coverage.*
 *.out
 
 # Генерация
-gen/
 internal/db/sqlc.yml # если приватный
 db/migrations/*.sql-journal
 
