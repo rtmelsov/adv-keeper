@@ -1,0 +1,36 @@
+syntax = "proto3";
+package common.v1;
+option go_package = "github.com/rtmelsov/adv-keeper/gen/go/common/v1;commonv1";
+
+message DeviceInfo {
+  string device_id = 1; // клиентский идентификатор устройства
+}
+
+service AuthService {
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc Login(LoginRequest) returns (LoginResponse);
+}
+
+message RegisterRequest {
+  string email    = 1;
+  string password = 2;
+  DeviceInfo device = 3;
+}
+
+message RegisterResponse {
+  string user_id   = 1;
+  string device_id = 2; // вернём то, что прислал клиент
+  string email     = 3;
+}
+
+message LoginRequest {
+  string email    = 1;
+  string password = 2;
+  DeviceInfo device = 3;
+}
+
+message LoginResponse {
+  string user_id   = 1;
+  string device_id = 2; // вернём то, что прислал клиент
+  string email     = 3;
+}
