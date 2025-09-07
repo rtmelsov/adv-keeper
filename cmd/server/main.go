@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"google.golang.org/grpc/reflection"
 	"log"
 	"net"
 
@@ -38,6 +39,8 @@ func main() {
 	s := grpc.NewServer()
 	commonv1.RegisterAuthServiceServer(s, auth.New(q))
 	filev1.RegisterFileServiceServer(s, file.New(q))
+
+	reflection.Register(s)
 
 	log.Println("gRPC listening on", lis.Addr())
 	if err := s.Serve(lis); err != nil {
