@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"github.com/rtmelsov/adv-keeper/internal/akclient"
 )
 
 func (m TuiModel) Menu() string {
@@ -71,24 +70,6 @@ func (m TuiModel) Vault() string {
 	if m.CursorHor == 0 {
 		if m.OpenFilePicker {
 			s += m.FilePicker.View()
-		} else if m.SelectedFile != "" {
-			resp := make(chan string)
-
-			go func(resp chan<- string) {
-				var r string
-				_, err := akclient.UploadFile(m.SelectedFile)
-				if err != nil {
-					r = fmt.Sprintf("----ERROR: %s", err.Error())
-				} else {
-					r = "----SUCCESS----"
-				}
-
-				resp <- r
-
-			}(resp)
-
-			s += <-resp
-
 		}
 		if m.Cursor == 0 {
 			s += "[ADD FILE]"

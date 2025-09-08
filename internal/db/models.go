@@ -17,6 +17,14 @@ type Device struct {
 	CreatedAt time.Time
 }
 
+type File struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Name      string
+	Path      string
+	CreatedAt time.Time
+}
+
 type User struct {
 	ID        uuid.UUID
 	Email     string

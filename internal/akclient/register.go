@@ -6,6 +6,8 @@ import (
 	"log"
 	"time"
 
+	"errors"
+	"github.com/rtmelsov/adv-keeper/internal/helpers"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -13,11 +15,13 @@ import (
 )
 
 func Register(RegisterRequest *commonv1.RegisterRequest) (*commonv1.RegisterResponse, error) {
-	// 1) Соединение с сервером
-	addr := "127.0.0.1:8080" // или где у тебя слушает сервер
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	envs, err := helpers.LoadConfig()
 	if err != nil {
-		log.Fatalf("dial %s: %v", addr, err)
+		return nil, errors.New("не получилось распарсить переменные окуржения")
+	}
+	conn, err := grpc.NewClient(envs.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("dial %s: %v", envs.Addr, err)
 	}
 	defer conn.Close()
 

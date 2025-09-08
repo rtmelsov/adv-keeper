@@ -1,11 +1,11 @@
 package tui
 
 import (
-	filepicker "github.com/charmbracelet/bubbles/filepicker"
+	"github.com/charmbracelet/bubbles/filepicker"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
-	tea "github.com/charmbracelet/bubbletea"
-
 	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 type ProfileModel struct {
@@ -17,6 +17,7 @@ type ProfileModel struct {
 
 type TuiModel struct {
 	SelectedFile   string
+	Spinner        spinner.Model
 	FilePicker     filepicker.Model
 	OpenFilePicker bool
 	table          table.Model

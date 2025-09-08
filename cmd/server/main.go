@@ -5,44 +5,51 @@ import (
 	"google.golang.org/grpc/reflection"
 	"log"
 	"net"
-	"os"
+	"time"
 
 	commonv1 "github.com/rtmelsov/adv-keeper/gen/go/proto/common/v1"
 	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
-	"github.com/rtmelsov/adv-keeper/internal/auth"
 	db "github.com/rtmelsov/adv-keeper/internal/db"
 	"github.com/rtmelsov/adv-keeper/internal/file"
+	"github.com/rtmelsov/adv-keeper/internal/helpers"
+	"github.com/rtmelsov/adv-keeper/internal/middleware"
+	"github.com/rtmelsov/adv-keeper/internal/server"
+	"google.golang.org/grpc/keepalive"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"google.golang.org/grpc"
 )
 
 func main() {
-	dsn := os.Getenv("DB_DSN")
-	if dsn == "" {
-		log.Fatal("DB_DSN is required")
+	envs, err := helpers.LoadConfig()
+	if err != nil {
+		log.Fatal(err)
 	}
-	addr := os.Getenv("GRPC_ADDR")
-	if addr == "" {
-		addr = "127.0.0.1:8080"
-	}
-	// получаем урл бд
 
-	lis, err := net.Listen("tcp", addr)
+	lis, err := net.Listen("tcp", envs.Addr)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// Подключение к Postgres
-	dbx, err := sql.Open("pgx", dsn)
+	dbx, err := sql.Open("pgx", envs.DBDSN)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer dbx.Close()
 
 	q := db.New(dbx)
-	s := grpc.NewServer()
-	commonv1.RegisterAuthServiceServer(s, auth.New(q))
+	s := grpc.NewServer(
+		grpc.UnaryInterceptor(middleware.ServerInterceptor),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			MaxConnectionIdle:     0,
+			MaxConnectionAge:      0,
+			MaxConnectionAgeGrace: 0,
+			Time:                  2 * time.Minute,
+			Timeout:               20 * time.Second,
+		}),
+	)
+	commonv1.RegisterAuthServiceServer(s, server.New(q))
 	filev1.RegisterFileServiceServer(s, file.New(q))
 
 	reflection.Register(s)
