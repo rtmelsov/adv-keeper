@@ -1,11 +1,31 @@
+
 syntax = "proto3";
 
 package file.v1;
 option go_package = "github.com/rtmelsov/adv-keeper/gen/go/file/v1;filev1";
 
+import "google/protobuf/timestamp.proto";
+
 service FileService {
   // Клиент шлёт поток кусков, сервер в конце отвечает сводкой
   rpc Upload(stream UploadRequest) returns (UploadResponse);
+  // Список файлов текущего пользователя (берём user_id из контекста)
+  rpc GetFiles(GetFilesRequest) returns (GetFilesResponse);
+}
+
+message GetFilesRequest {
+  int32 limit  = 1; // по умолчанию 50
+  int32 offset = 2; // по умолчанию 0
+}
+
+message FileItem {
+  string filename = 1;
+  int64  size     = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+
+message GetFilesResponse {
+  repeated FileItem files = 1;
 }
 
 message UploadRequest {
@@ -21,8 +41,8 @@ message FileInfo {
 }
 
 message FileChunk {
-  bytes  content = 1;   // данные куска (< 4 MiB — лимит gRPC на сообщение)
-  int64  offset  = 2;   // сдвиг от начала файла (полезно для резюмации)
+  bytes content = 1;  // данные куска (< 4 MiB — лимит gRPC на сообщение)
+  int64 offset  = 2;  // сдвиг от начала файла (полезно для резюмации)
 }
 
 message UploadResponse {
@@ -30,3 +50,6 @@ message UploadResponse {
   int64  bytes_received = 2; // сколько байт приняли
   string sha256         = 3; // контрольная сумма принятого
 }
+
+
+

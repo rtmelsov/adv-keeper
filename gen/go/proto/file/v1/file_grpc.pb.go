@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	FileService_Upload_FullMethodName = "/file.v1.FileService/Upload"
+	FileService_Upload_FullMethodName   = "/file.v1.FileService/Upload"
+	FileService_GetFiles_FullMethodName = "/file.v1.FileService/GetFiles"
 )
 
 // FileServiceClient is the client API for FileService service.
@@ -28,6 +29,8 @@ const (
 type FileServiceClient interface {
 	// Клиент шлёт поток кусков, сервер в конце отвечает сводкой
 	Upload(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadRequest, UploadResponse], error)
+	// Список файлов текущего пользователя (берём user_id из контекста)
+	GetFiles(ctx context.Context, in *GetFilesRequest, opts ...grpc.CallOption) (*GetFilesResponse, error)
 }
 
 type fileServiceClient struct {
@@ -51,12 +54,24 @@ func (c *fileServiceClient) Upload(ctx context.Context, opts ...grpc.CallOption)
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type FileService_UploadClient = grpc.ClientStreamingClient[UploadRequest, UploadResponse]
 
+func (c *fileServiceClient) GetFiles(ctx context.Context, in *GetFilesRequest, opts ...grpc.CallOption) (*GetFilesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetFilesResponse)
+	err := c.cc.Invoke(ctx, FileService_GetFiles_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FileServiceServer is the server API for FileService service.
 // All implementations should embed UnimplementedFileServiceServer
 // for forward compatibility.
 type FileServiceServer interface {
 	// Клиент шлёт поток кусков, сервер в конце отвечает сводкой
 	Upload(grpc.ClientStreamingServer[UploadRequest, UploadResponse]) error
+	// Список файлов текущего пользователя (берём user_id из контекста)
+	GetFiles(context.Context, *GetFilesRequest) (*GetFilesResponse, error)
 }
 
 // UnimplementedFileServiceServer should be embedded to have
@@ -68,6 +83,9 @@ type UnimplementedFileServiceServer struct{}
 
 func (UnimplementedFileServiceServer) Upload(grpc.ClientStreamingServer[UploadRequest, UploadResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method Upload not implemented")
+}
+func (UnimplementedFileServiceServer) GetFiles(context.Context, *GetFilesRequest) (*GetFilesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetFiles not implemented")
 }
 func (UnimplementedFileServiceServer) testEmbeddedByValue() {}
 
@@ -96,13 +114,36 @@ func _FileService_Upload_Handler(srv interface{}, stream grpc.ServerStream) erro
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type FileService_UploadServer = grpc.ClientStreamingServer[UploadRequest, UploadResponse]
 
+func _FileService_GetFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetFilesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FileServiceServer).GetFiles(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FileService_GetFiles_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FileServiceServer).GetFiles(ctx, req.(*GetFilesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // FileService_ServiceDesc is the grpc.ServiceDesc for FileService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var FileService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "file.v1.FileService",
 	HandlerType: (*FileServiceServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetFiles",
+			Handler:    _FileService_GetFiles_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "Upload",

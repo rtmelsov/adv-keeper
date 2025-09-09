@@ -14,6 +14,9 @@ func (m TuiModel) Menu() string {
 		}
 
 		checked := " "
+		if m.Cursor == i {
+			checked = "*"
+		}
 
 		s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, choice)
 	}
@@ -70,12 +73,15 @@ func (m TuiModel) Vault() string {
 	if m.CursorHor == 0 {
 		if m.OpenFilePicker {
 			s += m.FilePicker.View()
-		}
-		if m.Cursor == 0 {
-			s += "[ADD FILE]"
-		}
-		if m.Cursor == 1 {
-			s += "<[ADD FILE]>"
+		} else if m.SelectedFile != "" {
+			s += fmt.Sprintf("\nВы выбрали файл: %s\n", m.SelectedFile)
+		} else {
+			if m.Cursor == 0 {
+				s += "\n [ADD FILE] \n"
+			}
+			if m.Cursor == 1 {
+				s += "\n<[ADD FILE]>\n"
+			}
 		}
 	} else {
 		s += baseStyle.Render(m.table.View()) + "\n"

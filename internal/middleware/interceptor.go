@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	headerAuthorize = "authorization"
+	headerAuthorize = "AccessToken"
 )
 
 var allowUnauth = map[string]struct{}{
@@ -35,9 +35,14 @@ func ServerInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo,
 		return "", status.Error(codes.Unauthenticated, "Bad authorization string")
 	}
 
-	helpers.VerifyToken(token)
+	m, err := helpers.VerifyToken(token)
+	if err != nil {
+		return nil, err
+	}
 
-	resp, err := handler(ctx, req)
+	newCtx := context.WithValue(ctx, "UserID", m.UserID)
+
+	resp, err := handler(newCtx, req)
 
 	if err != nil {
 		return nil, err

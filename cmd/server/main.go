@@ -10,7 +10,6 @@ import (
 	commonv1 "github.com/rtmelsov/adv-keeper/gen/go/proto/common/v1"
 	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
 	db "github.com/rtmelsov/adv-keeper/internal/db"
-	"github.com/rtmelsov/adv-keeper/internal/file"
 	"github.com/rtmelsov/adv-keeper/internal/helpers"
 	"github.com/rtmelsov/adv-keeper/internal/middleware"
 	"github.com/rtmelsov/adv-keeper/internal/server"
@@ -50,7 +49,7 @@ func main() {
 		}),
 	)
 	commonv1.RegisterAuthServiceServer(s, server.New(q))
-	filev1.RegisterFileServiceServer(s, file.New(q))
+	filev1.RegisterFileServiceServer(s, server.NewFile(q))
 
 	reflection.Register(s)
 

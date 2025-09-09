@@ -46,13 +46,13 @@ func (s *Service) Register(ctx context.Context, in *commonv1.RegisterRequest) (*
 	}
 
 	// внутри Register(...)
-	arg := db.RegisterWithDeviceParams{
+	arg := db.RegisterParams{
 		Email:   email,
 		PwdPhc:  string(hash), // bcrypt/argon2 — как у тебя
 		E2eePub: nil,          // или []byte{} / из запроса
 	}
 
-	ID, err := s.Q.RegisterWithDevice(ctx, arg)
+	ID, err := s.Q.Register(ctx, arg)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {

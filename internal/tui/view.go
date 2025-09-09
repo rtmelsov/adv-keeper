@@ -3,11 +3,12 @@ package tui
 
 import (
 	"fmt"
+	"github.com/rtmelsov/adv-keeper/internal/ui"
 )
 
 func (m TuiModel) View() string {
 	if m.Loading {
-		return "LOADING..."
+		return ui.StatusBar.Render(m.Spin.View()+" Загрузка…") + "\n"
 	}
 	s := "CAN'T FIND THE PAGE"
 
@@ -22,14 +23,7 @@ func (m TuiModel) View() string {
 		s = "Login"
 	}
 
-	s += "\nm.Selected: "
-	s += m.Selected + "\n"
-	s += "\n↑/k ↓/j — навигация, ␣/Enter — выбрать, a — выделить всё, x — удалить, q — выход.\n"
-
 	before := ""
-	if m.Loading {
-		before = fmt.Sprintf("LOADING...%s\n", m.Error)
-	}
 	if m.Error != "" {
 		before = fmt.Sprintf("Error: %s\n", m.Error)
 	}
@@ -39,7 +33,11 @@ func (m TuiModel) View() string {
 		before += "Profile: ---\n"
 	}
 
-	nav := "<[MAIN]>  [FAILS] \n"
+	nav := " [MAIN]   [FAILS] \n"
+
+	if m.Cursor == 0 {
+		nav = "<[MAIN]>  [FAILS] \n"
+	}
 	if m.CursorHor == 1 {
 		nav = " [MAIN]  <[FAILS]>\n"
 	}

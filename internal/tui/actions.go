@@ -11,6 +11,10 @@ func (m *TuiModel) MenuAction() {
 	m.Cursor = 0
 }
 
+func (m *TuiModel) VaultActions() {
+
+}
+
 func (m *TuiModel) RegisterAction() {
 	switch m.Cursor {
 	case 0:
@@ -53,6 +57,6 @@ func (m *TuiModel) RegisterAction() {
 		}
 		m.Profile.Auth = true
 		m.Selected = "Vault"
-		m.Cursor = 0
+		m.Cursor = 1
 	}
 }

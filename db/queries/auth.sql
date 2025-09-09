@@ -1,4 +1,4 @@
--- name: RegisterWithDevice :one
+-- name: Register :one
 INSERT INTO users (email, pwd_phc, e2ee_pub)
 VALUES ($1, $2, $3)
 RETURNING id;
@@ -9,16 +9,18 @@ FROM users
 WHERE email = $1;
 
 -- name: AddFile :one
-INSERT INTO files (user_id, name, path)
-VALUES ($1, $2, $3)
-RETURNING id, user_id, name, path, created_at;
+INSERT INTO files (user_id, filename, path, size_bytes)
+VALUES ($1, $2, $3, $4)
+RETURNING id, user_id, filename, path, size_bytes, created_at;
 
 -- name: ListFilesByUser :many
-SELECT id, name, path, created_at
+SELECT id, filename, path, size_bytes, created_at
 FROM files
 WHERE user_id = $1
 ORDER BY created_at DESC;
 
--- name: DeleteFile :exec
+-- name: DeleteFile :one
 DELETE FROM files
-WHERE id = $1 AND user_id = $2;
+WHERE id = $1 AND user_id = $2
+RETURNING id;  -- проще понять, удалилось или нет
+

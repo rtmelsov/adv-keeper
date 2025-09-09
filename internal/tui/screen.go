@@ -1,9 +1,8 @@
 package tui
 
 import (
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/rtmelsov/adv-keeper/internal/akclient"
-	"os"
 	"path/filepath"
 )
 
@@ -23,63 +22,35 @@ func (m TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	}
+
+	// 2) сначала ловим завершение фоновой задачи
 	switch msg := msg.(type) {
+	case uploadFinishedMsg:
+		m.Loading = false
+		if msg.err != nil {
+			m.Error = msg.err.Error()
+		} else {
+			m.Error = ""
+			m.SelectedFile = ""
+		}
+		return m, nil
+
+	// 3) тики спиннера: только когда Loading=true
+	case spinner.TickMsg:
+		if m.Loading {
+			var cmd tea.Cmd
+			m.Spin, cmd = m.Spin.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
 
 		if m.Selected == "Vault" {
-			switch msg.String() {
-			case "esc":
-				if m.table.Focused() {
-					m.table.Blur()
-				} else {
-					m.table.Focus()
-				}
-			case "right", "l":
-				if m.CursorHor < 1 {
-					m.CursorHor++
-				} else {
-					m.CursorHor = 0
-				}
-			case "left", "h":
-				if m.CursorHor > 0 {
-					m.CursorHor--
-				}
-			case "enter":
-				if m.CursorHor == 0 && m.SelectedFile == "" {
-					if home, err := os.UserHomeDir(); err == nil && home != "" {
-						m.FilePicker.CurrentDirectory = home
-						m.FilePicker.Path = home
-					} else if wd, _ := os.Getwd(); wd != "" {
-						m.FilePicker.CurrentDirectory = wd
-						m.FilePicker.Path = wd
-					} else {
-						m.FilePicker.CurrentDirectory = "/"
-						m.FilePicker.Path = "/"
-					}
-					m.FilePicker.SetHeight(14) // чтобы было видно список
-					// m.FilePicker.AllowedTypes = nil // не ставь []string{"*"}
-					m.OpenFilePicker = true
-					return m, m.FilePicker.Init() // ← важный момент
-				} else if m.SelectedFile != "" {
-					m.Loading = true
-					// запускаем асинхронную команду
-					return m, tea.Batch(
-						m.Spinner.Tick,
-						func() tea.Msg {
-							_, err := akclient.UploadFile(m.SelectedFile)
-							return struct{ err error }{err: err}
-						},
-					)
-				} else {
-					return m, tea.Batch(
-						tea.Printf("Let's go to %s!", m.table.SelectedRow()[1]),
-					)
-				}
-
-			}
+			return m.ReturnVault(msg.String())
 		}
 		if m.Selected == "Register" && m.InputFocused {
 			if msg.String() == "esc" {

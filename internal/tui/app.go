@@ -6,6 +6,9 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/rtmelsov/adv-keeper/internal/akclient"
+
+	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
 )
 
 type ProfileModel struct {
@@ -17,7 +20,10 @@ type ProfileModel struct {
 
 type TuiModel struct {
 	SelectedFile   string
-	Spinner        spinner.Model
+	Busy           int           // >0 — идёт фоновая операция
+	Spin           spinner.Model // bubbles/spinner
+	Err            error
+	Notice         string
 	FilePicker     filepicker.Model
 	OpenFilePicker bool
 	table          table.Model
@@ -66,12 +72,25 @@ func InitialModel() TuiModel {
 	fp.DirAllowed = false
 	fp.FileAllowed = true
 
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	selected := "Menu"
+
+	_, err := akclient.GetFiles(&filev1.GetFilesRequest{
+		Limit:  50,
+		Offset: 0,
+	})
+	if err == nil {
+		selected = "Vault"
+	}
+
 	return TuiModel{
 		Choices:    []string{"Vault", "Menu", "Register", "Login"},
 		History:    []string{},
 		table:      InitTable(),
 		FilePicker: fp,
-		Selected:   "Menu",
+		Spin:       sp,
+		Selected:   selected,
 		Profile:    &ProfileModel{Auth: false},
 		login:      login,
 		password:   password,

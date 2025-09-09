@@ -1,7 +1,7 @@
 package akclient
 
 import (
-	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/status"
 
 	"github.com/rtmelsov/adv-keeper/internal/helpers"
 	"github.com/rtmelsov/adv-keeper/internal/middleware"
@@ -20,13 +21,11 @@ import (
 const chunkSize = 1 << 20 // 1 MiB — безопасно ниже 4 MiB лимита на сообщение
 
 func UploadFile(path string) (*filev1.UploadResponse, error) {
-
-	session, err := helpers.LoadSession()
+	ctx, err := middleware.AddAuthData()
 	if err != nil {
 		return nil, err
 	}
 
-	ctx := middleware.AddAuthData(session.AccessToken)
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -42,6 +41,7 @@ func UploadFile(path string) (*filev1.UploadResponse, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	conn, err := grpc.NewClient(
 		envs.Addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -55,14 +55,13 @@ func UploadFile(path string) (*filev1.UploadResponse, error) {
 			grpc.MaxCallSendMsgSize(8<<20),
 		),
 	)
+
 	if err != nil {
 		return nil, err
 	}
 	defer conn.Close()
 
 	client := filev1.NewFileServiceClient(conn)
-	ctx, cancel := context.WithTimeout(ctx, 24*time.Hour)
-	defer cancel()
 
 	stream, err := client.Upload(ctx)
 	if err != nil {
@@ -70,14 +69,15 @@ func UploadFile(path string) (*filev1.UploadResponse, error) {
 	}
 
 	// 1) отправляем мета-инфу (первое сообщение)
-	if err := stream.Send(&filev1.UploadRequest{
+	err = stream.Send(&filev1.UploadRequest{
 		Payload: &filev1.UploadRequest_Info{
 			Info: &filev1.FileInfo{
 				Filename: filepath.Base(path),
 				Size:     stat.Size(),
 			},
 		},
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, err
 	}
 
@@ -94,22 +94,22 @@ func UploadFile(path string) (*filev1.UploadResponse, error) {
 			if err := stream.Send(&filev1.UploadRequest{
 				Payload: &filev1.UploadRequest_Chunk{Chunk: chunk},
 			}); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("send chunk: %w", err)
 			}
 			offset += int64(n)
 		}
-		if readErr == io.EOF {
-			break
-		}
-		if readErr != nil {
-			return nil, err
+		if readErr != nil && readErr != io.EOF {
+			return nil, fmt.Errorf("read file: %w", readErr)
 		}
 	}
 
 	// 3) закрываем отправку и получаем ответ
 	resp, err := stream.CloseAndRecv()
 	if err != nil {
-		return nil, err
+		if st, ok := status.FromError(err); ok {
+			return nil, fmt.Errorf("upload failed: %s: %s", st.Code(), st.Message())
+		}
+		return nil, fmt.Errorf("upload failed: %w", err)
 	}
 	return resp, nil
 }

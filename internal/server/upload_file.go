@@ -1,5 +1,5 @@
 // Package file
-package file
+package server
 
 import (
 	"crypto/sha256"
@@ -12,9 +12,9 @@ import (
 	"time"
 
 	db "github.com/rtmelsov/adv-keeper/internal/db"
+	"github.com/rtmelsov/adv-keeper/internal/helpers"
 
 	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
-	"github.com/rtmelsov/adv-keeper/internal/helpers"
 )
 
 type FileServer struct {
@@ -23,13 +23,9 @@ type FileServer struct {
 	uploadDir string
 }
 
-func New(q *db.Queries) *FileServer {
-	envs, err := helpers.LoadConfig()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return &FileServer{Q: q, uploadDir: envs.FilesDir}
+func NewFile(q *db.Queries) *FileServer {
+	conf, _ := helpers.LoadConfig()
+	return &FileServer{Q: q, uploadDir: conf.FilesDir}
 }
 
 func (s *FileServer) Upload(stream filev1.FileService_UploadServer) error {

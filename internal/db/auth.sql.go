@@ -13,33 +13,50 @@ import (
 )
 
 const addFile = `-- name: AddFile :one
-INSERT INTO files (user_id, name, path)
-VALUES ($1, $2, $3)
-RETURNING id, user_id, name, path, created_at
+INSERT INTO files (user_id, filename, path, size_bytes)
+VALUES ($1, $2, $3, $4)
+RETURNING id, user_id, filename, path, size_bytes, created_at
 `
 
 type AddFileParams struct {
-	UserID uuid.UUID
-	Name   string
-	Path   string
+	UserID    uuid.UUID
+	Filename  string
+	Path      string
+	SizeBytes int64
 }
 
-func (q *Queries) AddFile(ctx context.Context, arg AddFileParams) (File, error) {
-	row := q.db.QueryRowContext(ctx, addFile, arg.UserID, arg.Name, arg.Path)
-	var i File
+type AddFileRow struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Filename  string
+	Path      string
+	SizeBytes int64
+	CreatedAt time.Time
+}
+
+func (q *Queries) AddFile(ctx context.Context, arg AddFileParams) (AddFileRow, error) {
+	row := q.db.QueryRowContext(ctx, addFile,
+		arg.UserID,
+		arg.Filename,
+		arg.Path,
+		arg.SizeBytes,
+	)
+	var i AddFileRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
-		&i.Name,
+		&i.Filename,
 		&i.Path,
+		&i.SizeBytes,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
-const deleteFile = `-- name: DeleteFile :exec
+const deleteFile = `-- name: DeleteFile :one
 DELETE FROM files
 WHERE id = $1 AND user_id = $2
+RETURNING id
 `
 
 type DeleteFileParams struct {
@@ -47,9 +64,11 @@ type DeleteFileParams struct {
 	UserID uuid.UUID
 }
 
-func (q *Queries) DeleteFile(ctx context.Context, arg DeleteFileParams) error {
-	_, err := q.db.ExecContext(ctx, deleteFile, arg.ID, arg.UserID)
-	return err
+func (q *Queries) DeleteFile(ctx context.Context, arg DeleteFileParams) (uuid.UUID, error) {
+	row := q.db.QueryRowContext(ctx, deleteFile, arg.ID, arg.UserID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
@@ -72,7 +91,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 }
 
 const listFilesByUser = `-- name: ListFilesByUser :many
-SELECT id, name, path, created_at
+SELECT id, filename, path, size_bytes, created_at
 FROM files
 WHERE user_id = $1
 ORDER BY created_at DESC
@@ -80,8 +99,9 @@ ORDER BY created_at DESC
 
 type ListFilesByUserRow struct {
 	ID        uuid.UUID
-	Name      string
+	Filename  string
 	Path      string
+	SizeBytes int64
 	CreatedAt time.Time
 }
 
@@ -96,8 +116,9 @@ func (q *Queries) ListFilesByUser(ctx context.Context, userID uuid.UUID) ([]List
 		var i ListFilesByUserRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.Name,
+			&i.Filename,
 			&i.Path,
+			&i.SizeBytes,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -113,20 +134,20 @@ func (q *Queries) ListFilesByUser(ctx context.Context, userID uuid.UUID) ([]List
 	return items, nil
 }
 
-const registerWithDevice = `-- name: RegisterWithDevice :one
+const register = `-- name: Register :one
 INSERT INTO users (email, pwd_phc, e2ee_pub)
 VALUES ($1, $2, $3)
 RETURNING id
 `
 
-type RegisterWithDeviceParams struct {
+type RegisterParams struct {
 	Email   string
 	PwdPhc  string
 	E2eePub []byte
 }
 
-func (q *Queries) RegisterWithDevice(ctx context.Context, arg RegisterWithDeviceParams) (uuid.UUID, error) {
-	row := q.db.QueryRowContext(ctx, registerWithDevice, arg.Email, arg.PwdPhc, arg.E2eePub)
+func (q *Queries) Register(ctx context.Context, arg RegisterParams) (uuid.UUID, error) {
+	row := q.db.QueryRowContext(ctx, register, arg.Email, arg.PwdPhc, arg.E2eePub)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
