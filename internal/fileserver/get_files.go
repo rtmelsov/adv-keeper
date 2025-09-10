@@ -1,7 +1,10 @@
-package server
+package fileserver
 
 import (
 	"context"
+
+	"github.com/rtmelsov/adv-keeper/internal/db"
+	"github.com/rtmelsov/adv-keeper/internal/helpers"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -11,7 +14,18 @@ import (
 	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
 )
 
-func (s *FileServer) GetFiles(ctx context.Context, GetFileRequest *filev1.GetFilesRequest) (*filev1.GetFilesResponse, error) {
+type Service struct {
+	filev1.UnimplementedFileServiceServer
+	Q         *db.Queries
+	UploadDir string
+}
+
+func New(q *db.Queries) *Service {
+	conf, _ := helpers.LoadConfig()
+	return &Service{Q: q, UploadDir: conf.FilesDir}
+}
+
+func (s *Service) GetFiles(ctx context.Context, GetFileRequest *filev1.GetFilesRequest) (*filev1.GetFilesResponse, error) {
 	// 1) найти пользователя по email
 	userIDRaw := ctx.Value("UserID")
 	userIDStr, ok := userIDRaw.(string)

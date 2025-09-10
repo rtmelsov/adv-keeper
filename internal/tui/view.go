@@ -7,8 +7,9 @@ import (
 )
 
 func (m TuiModel) View() string {
+
 	if m.Loading {
-		return ui.StatusBar.Render(m.Spin.View()+" Загрузка…") + "\n"
+		return ui.StatusBar.Render(m.Spin.View()+" Загрузка…") + fmt.Sprintf("chunk size: %v - %v", m.LoaderCount.FileSize, m.LoaderCount.ChankSize) + "\n"
 	}
 	s := "CAN'T FIND THE PAGE"
 

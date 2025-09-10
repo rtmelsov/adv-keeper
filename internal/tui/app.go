@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/rtmelsov/adv-keeper/internal/akclient"
+	"github.com/rtmelsov/adv-keeper/internal/models"
 
 	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
 )
@@ -19,6 +20,9 @@ type ProfileModel struct {
 }
 
 type TuiModel struct {
+	LoaderCount    models.LoaderType
+	W              int
+	H              int
 	SelectedFile   string
 	Busy           int           // >0 — идёт фоновая операция
 	Spin           spinner.Model // bubbles/spinner

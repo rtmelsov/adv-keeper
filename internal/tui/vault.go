@@ -3,6 +3,7 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/rtmelsov/adv-keeper/internal/akclient"
+
 	"os"
 )
 
@@ -31,7 +32,7 @@ func (m TuiModel) ReturnVault(msg string) (tea.Model, tea.Cmd) {
 			m.Cursor--
 		}
 	case "down", "j":
-		if m.Cursor < len(m.Choices)-1 {
+		if m.Cursor < 1 {
 			m.Cursor++
 		}
 

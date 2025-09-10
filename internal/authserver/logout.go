@@ -1,5 +1,5 @@
 // Package server
-package server
+package authserver
 
 import (
 	"context"

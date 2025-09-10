@@ -1,34 +1,22 @@
-// Package file
-package server
+// Package fileserver
+package fileserver
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
 
-	db "github.com/rtmelsov/adv-keeper/internal/db"
-	"github.com/rtmelsov/adv-keeper/internal/helpers"
+	"github.com/charmbracelet/log"
 
 	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
 )
 
-type FileServer struct {
-	filev1.UnimplementedFileServiceServer
-	Q         *db.Queries
-	uploadDir string
-}
-
-func NewFile(q *db.Queries) *FileServer {
-	conf, _ := helpers.LoadConfig()
-	return &FileServer{Q: q, uploadDir: conf.FilesDir}
-}
-
-func (s *FileServer) Upload(stream filev1.FileService_UploadServer) error {
+func (s *Service) Upload(stream filev1.FileService_UploadServer) error {
+	log.Info("upload get request...")
 	var (
 		outFile   *os.File
 		written   int64
@@ -42,27 +30,36 @@ func (s *FileServer) Upload(stream filev1.FileService_UploadServer) error {
 	if err != nil {
 		return err
 	}
+
+	log.Info("stream recv...")
 	info := first.GetInfo()
 	if info == nil {
 		return fmt.Errorf("first message must be FileInfo")
 	}
+
+	log.Info("first get info...")
 
 	filename = filepath.Base(info.Filename)
 	if filename == "" {
 		filename = fmt.Sprintf("upload-%d.bin", time.Now().UnixNano())
 	}
 
-	tmpPath := filepath.Join(s.uploadDir, filename+".part")
-	finalPath := filepath.Join(s.uploadDir, filename)
+	log.Info("file path - file name...", "path", filename)
 
-	// гарантируем папку
-	if err := os.MkdirAll(s.uploadDir, 0o755); err != nil {
-		return err
-	}
+	tmpPath := filepath.Join(s.UploadDir, filename+".part")
+	finalPath := filepath.Join(s.UploadDir, filename)
+
+	log.Info("start: mkdir...", "file name", filename)
+
+	log.Info("mkdir all uplaod dir...", "path", s.UploadDir)
 	outFile, err = os.Create(tmpPath)
 	if err != nil {
+
+		log.Error("OS CREATE", "error: ", err.Error())
 		return err
 	}
+
+	log.Info("created dir...", s.UploadDir)
 	defer func() {
 		outFile.Close()
 		// Если контекст отменён — удалим частичный файл
@@ -71,46 +68,70 @@ func (s *FileServer) Upload(stream filev1.FileService_UploadServer) error {
 		}
 	}()
 
+	log.Info("start to get file info...")
 	// 2) принимаем куски
 	for {
+		log.Info("uploading by piece...")
 		// Проверим отмену клиента/дедлайн
 		if err := stream.Context().Err(); err != nil {
+			log.Error("stream Context", "Error", err.Error())
 			return err
 		}
 
+		log.Info("1")
+
 		msg, err := stream.Recv()
+
+		log.Info("1.2")
 		if err == io.EOF {
+			log.Error("io.EOF: stream Recv", "Error", err.Error())
 			break
 		}
+
+		log.Info("1.5")
 		if err != nil {
+			log.Error("stream Recv", "Error", err.Error())
 			return err
 		}
+
+		log.Info("2")
 		ch := msg.GetChunk()
 		if ch == nil {
+			log.Error("unexpected message type: want FileChunk")
 			return fmt.Errorf("unexpected message type: want FileChunk")
 		}
 
 		n, err := outFile.Write(ch.Content)
 		if err != nil {
+			log.Error("outFile.Write", "Error", err.Error())
 			return err
 		}
+
+		log.Info("3")
 		written += int64(n)
 		_, _ = hasher.Write(ch.Content) // считаем sha256 «на лету»
+		log.Info("end to add that piece...")
 	}
 
+	log.Info("end: getting info...")
 	// 3) закрываем и переименовываем atomic-стилем
 	if err := outFile.Sync(); err != nil {
 		return err
 	}
+
+	log.Info("out file sync...")
 	if err := outFile.Close(); err != nil {
 		return err
 	}
+
+	log.Info("out file close...")
 	if err := os.Rename(tmpPath, finalPath); err != nil {
 		return err
 	}
+	log.Info("os rename...")
 
 	sum := hex.EncodeToString(hasher.Sum(nil))
-	log.Printf("Upload done: %s, bytes=%d, sha256=%s, took=%s",
+	log.Info("Upload done: %s, bytes=%d, sha256=%s, took=%s",
 		finalPath, written, sum, time.Since(startTime))
 
 	return stream.SendAndClose(&filev1.UploadResponse{

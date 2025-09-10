@@ -98,7 +98,10 @@ func UploadFile(path string) (*filev1.UploadResponse, error) {
 			}
 			offset += int64(n)
 		}
-		if readErr != nil && readErr != io.EOF {
+		if readErr == io.EOF {
+			break // <— обязательно выходим!
+		}
+		if readErr != nil {
 			return nil, fmt.Errorf("read file: %w", readErr)
 		}
 	}

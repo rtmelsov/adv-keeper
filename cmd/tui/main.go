@@ -43,9 +43,4 @@ func main() {
 		idxs = append(idxs, i)
 	}
 	sort.Ints(idxs)
-
-	fmt.Println("Вы выбрали:")
-	for _, i := range idxs {
-		fmt.Printf(" • %s\n", m.Choices[i])
-	}
 }

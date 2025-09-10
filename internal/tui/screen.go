@@ -3,6 +3,7 @@ package tui
 import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+
 	"path/filepath"
 )
 
