@@ -71,6 +71,40 @@ func (q *Queries) DeleteFile(ctx context.Context, arg DeleteFileParams) (uuid.UU
 	return id, err
 }
 
+const getFileForUser = `-- name: GetFileForUser :one
+SELECT id, user_id, filename, path, size_bytes, created_at
+FROM files
+WHERE id = $1 AND user_id = $2
+`
+
+type GetFileForUserParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+type GetFileForUserRow struct {
+	ID        uuid.UUID
+	UserID    uuid.UUID
+	Filename  string
+	Path      string
+	SizeBytes int64
+	CreatedAt time.Time
+}
+
+func (q *Queries) GetFileForUser(ctx context.Context, arg GetFileForUserParams) (GetFileForUserRow, error) {
+	row := q.db.QueryRowContext(ctx, getFileForUser, arg.ID, arg.UserID)
+	var i GetFileForUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Filename,
+		&i.Path,
+		&i.SizeBytes,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, email, pwd_phc, e2ee_pub, created_at
 FROM users
@@ -87,6 +121,26 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.E2eePub,
 		&i.CreatedAt,
 	)
+	return i, err
+}
+
+const getUserByID = `-- name: GetUserByID :one
+
+SELECT id, email, created_at
+FROM users
+WHERE id = $1
+`
+
+type GetUserByIDRow struct {
+	ID        uuid.UUID
+	Email     string
+	CreatedAt time.Time
+}
+
+func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (GetUserByIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserByID, id)
+	var i GetUserByIDRow
+	err := row.Scan(&i.ID, &i.Email, &i.CreatedAt)
 	return i, err
 }
 

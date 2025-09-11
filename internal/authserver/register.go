@@ -7,6 +7,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonv1 "github.com/rtmelsov/adv-keeper/gen/go/proto/common/v1"
@@ -57,11 +58,12 @@ func (s *Service) Register(ctx context.Context, in *commonv1.RegisterRequest) (*
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return nil, status.Error(codes.AlreadyExists, "email already exists")
 		}
-		return nil, status.Error(codes.Internal, "db error")
+		return nil, status.Error(codes.Internal, fmt.Sprintf("db error: %s", err.Error()))
 	}
 
 	// 3) сгенерить токены
 	access, exp, err := helpers.NewAccessJWT(ID.String())
+	log.Info("access", access)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "jwt")
 	}

@@ -2,6 +2,9 @@
 package fileserver
 
 import (
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -11,11 +14,21 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
+	db "github.com/rtmelsov/adv-keeper/internal/db"
+	"github.com/rtmelsov/adv-keeper/internal/helpers"
 
 	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
 )
 
 func (s *Service) Upload(stream filev1.FileService_UploadServer) error {
+	log.Info("try to get client id")
+
+	ctx := stream.Context()
+	uid, err := helpers.UserIDFromCtx(ctx)
+	if err != nil {
+		log.Error("error while try to get client id", "error", err.Error())
+		return err
+	}
 	log.Info("upload get request...")
 	var (
 		outFile   *os.File
@@ -63,7 +76,7 @@ func (s *Service) Upload(stream filev1.FileService_UploadServer) error {
 	defer func() {
 		outFile.Close()
 		// Если контекст отменён — удалим частичный файл
-		if stream.Context().Err() != nil {
+		if ctx.Err() != nil {
 			_ = os.Remove(tmpPath)
 		}
 	}()
@@ -73,8 +86,8 @@ func (s *Service) Upload(stream filev1.FileService_UploadServer) error {
 	for {
 		log.Info("uploading by piece...")
 		// Проверим отмену клиента/дедлайн
-		if err := stream.Context().Err(); err != nil {
-			log.Error("stream Context", "Error", err.Error())
+		if err := ctx.Err(); err != nil {
+			log.Error("Context", "Error", err.Error())
 			return err
 		}
 
@@ -119,11 +132,6 @@ func (s *Service) Upload(stream filev1.FileService_UploadServer) error {
 		return err
 	}
 
-	log.Info("out file sync...")
-	if err := outFile.Close(); err != nil {
-		return err
-	}
-
 	log.Info("out file close...")
 	if err := os.Rename(tmpPath, finalPath); err != nil {
 		return err
@@ -133,6 +141,18 @@ func (s *Service) Upload(stream filev1.FileService_UploadServer) error {
 	sum := hex.EncodeToString(hasher.Sum(nil))
 	log.Info("Upload done: %s, bytes=%d, sha256=%s, took=%s",
 		finalPath, written, sum, time.Since(startTime))
+
+	_, err = s.Q.AddFile(ctx, db.AddFileParams{
+		UserID:    uid,
+		Filename:  filename,
+		Path:      finalPath,
+		SizeBytes: info.GetSize(),
+	})
+	if err != nil {
+		_ = os.Remove(finalPath) // best effort
+
+		return status.Errorf(codes.Internal, "db insert failed: %v", err)
+	}
 
 	return stream.SendAndClose(&filev1.UploadResponse{
 		StoredAs:      finalPath,

@@ -6,42 +6,46 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
 	"github.com/rtmelsov/adv-keeper/internal/akclient"
 	"github.com/rtmelsov/adv-keeper/internal/models"
-
-	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
 )
 
 type ProfileModel struct {
-	UserID   string
-	Email    string
-	DeviceID string
-	Auth     bool
+	Email string
+	Auth  bool
 }
 
 type TuiModel struct {
-	LoaderCount    models.LoaderType
-	W              int
-	H              int
-	SelectedFile   string
-	Busy           int           // >0 — идёт фоновая операция
-	Spin           spinner.Model // bubbles/spinner
-	Err            error
-	Notice         string
-	FilePicker     filepicker.Model
-	OpenFilePicker bool
-	table          table.Model
-	Loading        bool
-	History        []string
-	Error          string
-	Profile        *ProfileModel
-	Choices        []string // элементы списка
-	InputFocused   bool
-	Cursor         int // индекс строки под курсором
-	CursorHor      int // индекс строки под курсором
-	login          textinput.Model
-	password       textinput.Model
-	Selected       string
+	LoaderCount      models.LoaderType
+	W                int
+	H                int
+	SideBarW         int
+	Files            *filev1.GetFilesResponse
+	SelectedFile     string
+	token            string
+	Busy             int           // >0 — идёт фоновая операция
+	Spin             spinner.Model // bubbles/spinner
+	Err              error
+	Notice           string
+	SelectedFileInfo *filev1.FileItem
+	FilePicker       filepicker.Model
+	OpenFilePicker   bool
+	table            table.Model
+	Loading          bool
+	Error            string
+	Profile          *ProfileModel
+	Choices          []string // элементы списка
+	LoginChoices     []string
+	MainChoices      []string
+	InputFocused     bool
+	LeftCursor       int // индекс строки под курсором
+	RightCursor      int // индекс строки под курсором
+	HorCursor        int // индекс строки под курсором
+	login            textinput.Model
+	password         textinput.Model
+	SelectedPage     string
+	MaxPageSize      map[string]int
 }
 
 func (m TuiModel) PickerInit() tea.Cmd {
@@ -78,26 +82,42 @@ func InitialModel() TuiModel {
 
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-	selected := "Menu"
+	selected := "Main"
+	profile := &ProfileModel{Auth: false}
+	mainChoices := []string{"Vault", "FileList", "Main", "Logout"}
+	choices := mainChoices
+	loginChoices := []string{"Register", "Login"}
 
-	_, err := akclient.GetFiles(&filev1.GetFilesRequest{
-		Limit:  50,
-		Offset: 0,
-	})
-	if err == nil {
-		selected = "Vault"
+	resp, err := akclient.GetProfile()
+	if err != nil {
+		selected = "Register"
+		choices = []string{"Register", "Login"}
+	} else {
+		profile.Email = resp.Email
+		profile.Auth = true
+	}
+
+	MaxPageSize := map[string]int{
+		"Vault": 0, "Main": 1, "Register": 2, "Login": 2, "FileList": 0, "FileDetails": 1,
 	}
 
 	return TuiModel{
-		Choices:    []string{"Vault", "Menu", "Register", "Login"},
-		History:    []string{},
-		table:      InitTable(),
-		FilePicker: fp,
-		Spin:       sp,
-		Selected:   selected,
-		Profile:    &ProfileModel{Auth: false},
-		login:      login,
-		password:   password,
+		Files:        &filev1.GetFilesResponse{},
+		Choices:      choices,
+		MainChoices:  mainChoices,
+		LoginChoices: loginChoices,
+		W:            88,
+		H:            44,
+		HorCursor:    1,
+		SideBarW:     24,
+		table:        InitTable(),
+		FilePicker:   fp,
+		Spin:         sp,
+		SelectedPage: selected,
+		MaxPageSize:  MaxPageSize,
+		Profile:      profile,
+		login:        login,
+		password:     password,
 	}
 }
 

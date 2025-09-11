@@ -1,3 +1,4 @@
+// Package akclient
 package akclient
 
 import (
@@ -7,22 +8,14 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/emptypb"
 
-	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
+	commonv1 "github.com/rtmelsov/adv-keeper/gen/go/proto/common/v1"
 	"github.com/rtmelsov/adv-keeper/internal/helpers"
-	"github.com/rtmelsov/adv-keeper/internal/middleware"
 )
 
-func GetFiles() (*filev1.GetFilesResponse, error) {
-	GetFilesRequest := &filev1.GetFilesRequest{
-		Limit: 50,
-	}
+func Logout() (*commonv1.TokenPair, error) {
 	envs, err := helpers.LoadConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	ctxWithMeta, err := middleware.AddAuthData()
 	if err != nil {
 		return nil, err
 	}
@@ -34,11 +27,11 @@ func GetFiles() (*filev1.GetFilesResponse, error) {
 	defer conn.Close()
 
 	// 2) gRPC-клиент
-	c := filev1.NewFileServiceClient(conn)
+	c := commonv1.NewAuthServiceClient(conn)
 
 	// 3) Вызываем RPC (клиент инициирует запрос)
-	ctx, cancel := context.WithTimeout(ctxWithMeta, 40*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 
-	return c.GetFiles(ctx, GetFilesRequest)
+	return c.Logout(ctx, &emptypb.Empty{})
 }

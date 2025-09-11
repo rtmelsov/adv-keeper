@@ -31,7 +31,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	helpers.RunMigrations(envs.DBDSN)
 	// Подключение к Postgres
 	dbx, err := sql.Open("pgx", envs.DBDSN)
 	if err != nil {
@@ -42,6 +42,7 @@ func main() {
 	q := db.New(dbx)
 	s := grpc.NewServer(
 		grpc.UnaryInterceptor(middleware.ServerInterceptor),
+		grpc.StreamInterceptor(middleware.StreamInterceptor), // вот тут
 		grpc.KeepaliveParams(keepalive.ServerParameters{
 			MaxConnectionIdle:     0,
 			MaxConnectionAge:      0,

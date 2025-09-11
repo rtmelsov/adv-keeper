@@ -3,33 +3,96 @@ package ui
 
 import "github.com/charmbracelet/lipgloss"
 
+// Палитра (адаптивная под светлую/тёмную тему)
 var (
-	Fg     = lipgloss.AdaptiveColor{Light: "#1F2328", Dark: "#C7D0D9"}
-	Bg     = lipgloss.AdaptiveColor{Light: "#F6F8FA", Dark: "#0B141A"}
-	Accent = lipgloss.AdaptiveColor{Light: "#0969DA", Dark: "#58A6FF"}
-	Muted  = lipgloss.AdaptiveColor{Light: "#57606A", Dark: "#8B949E"}
-	Danger = lipgloss.AdaptiveColor{Light: "#D1242F", Dark: "#FF6B6B"}
+	ColBorder = lipgloss.AdaptiveColor{Light: "#E5E7EB", Dark: "#3B3F51"}
 
-	Title   = lipgloss.NewStyle().Bold(true).Foreground(Accent)
-	Label   = lipgloss.NewStyle().Foreground(Muted)
-	LabelOn = Label.Foreground(Accent)
+	// Outer app box (the centered 700×700-ish container)
+	AppBox = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colBorder).
+		Padding(1, 2)
 
-	Input = lipgloss.NewStyle().Padding(0, 1).
-		Border(lipgloss.RoundedBorder()).BorderForeground(Muted)
-	InputFocused = Input.BorderForeground(Accent)
+	// Left pane (menu) — only a right border, so it looks like a splitter
+	Sidebar = lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(colBorder).
+		BorderTop(false).BorderBottom(false).BorderLeft(false).BorderRight(true).
+		Padding(0, 1)
 
-	Btn = lipgloss.NewStyle().Padding(0, 2).
-		Border(lipgloss.RoundedBorder()).BorderForeground(Muted)
-	BtnFocused = Btn.Foreground(Accent).BorderForeground(Accent).Bold(true)
+	// Right pane (content)
+	Content = lipgloss.NewStyle().
+		Padding(0, 1)
 
-	ErrorText = lipgloss.NewStyle().Foreground(Danger)
+	// Optional: table box look
+	Table = lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(colBorder).
+		Padding(0, 1)
 
-	// Вот он — статус-бар: одна строка со спокойным цветом
-	StatusBar = lipgloss.NewStyle().Foreground(Muted).MarginTop(1)
-
-	Nav       = lipgloss.NewStyle().Foreground(Muted).Padding(0, 1)
-	NavActive = lipgloss.NewStyle().Foreground(Accent).Bold(true).Padding(0, 1)
-
-	TableBase = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).
-			BorderForeground(Muted).Padding(0, 1)
+	colText   = lipgloss.AdaptiveColor{Light: "#111111", Dark: "#E6E6E6"}
+	colMuted  = lipgloss.AdaptiveColor{Light: "#6B7280", Dark: "#A1A1AA"} // серый
+	colAccent = lipgloss.AdaptiveColor{Light: "#0EA5E9", Dark: "#7DD3FC"} // голубой
+	colPanel  = lipgloss.AdaptiveColor{Light: "#FFFFFF", Dark: "#0F1117"} // фон «карточки»
+	colBorder = lipgloss.AdaptiveColor{Light: "#E5E7EB", Dark: "#3B3F51"}
+	colError  = lipgloss.AdaptiveColor{Light: "#B91C1C", Dark: "#F87171"}
 )
+
+// Заголовки/текст
+var (
+	Title = lipgloss.NewStyle().Bold(true).Foreground(colText)
+	Muted = lipgloss.NewStyle().Faint(true).Foreground(colMuted)
+)
+
+// Вкладки (табы) — верхняя навигация
+var (
+	TabActive = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#000000")).
+			Background(lipgloss.Color("#FFFFFF")).
+			Bold(true).
+			Padding(0, 1).
+			MarginRight(1).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colBorder)
+
+	TabInactive = lipgloss.NewStyle().
+			Foreground(colMuted).
+			Padding(0, 1).
+			MarginRight(1).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colBorder)
+)
+
+// Пункты навигации/меню (в списках)
+var (
+	NavActive = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#000000")).
+			Background(lipgloss.Color("#FFFFFF")).
+			Bold(true).
+			Padding(0, 1)
+
+	NavInactive = lipgloss.NewStyle().
+			Foreground(colAccent).
+			Underline(true)
+)
+
+// Формы и кнопки
+var (
+	FieldLabel       = lipgloss.NewStyle().Foreground(colMuted)
+	FieldLabelActive = lipgloss.NewStyle().Foreground(colAccent).Bold(true)
+	ButtonInactive   = lipgloss.NewStyle().Foreground(colText).Padding(0, 2).Border(lipgloss.NormalBorder()).BorderForeground(colBorder)
+	ButtonActive     = lipgloss.NewStyle().Foreground(lipgloss.Color("#000000")).Background(lipgloss.Color("#FFFFFF")).Bold(true).Padding(0, 2).Border(lipgloss.RoundedBorder()).BorderForeground(colBorder)
+)
+
+// Контейнеры/таблицы/статус
+var (
+	Box       = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colBorder).Padding(1, 2)
+	Error     = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Background(colError).Padding(0, 1)
+	StatusBar = lipgloss.NewStyle().Background(colAccent).Foreground(lipgloss.Color("#000000")).Padding(0, 1)
+	MetaStyle = lipgloss.NewStyle().Faint(true)
+)
+
+// Контент справа (disabled)
+var ContentDisabled = Content.Copy().
+	Foreground(colMuted).
+	Faint(true)

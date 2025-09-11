@@ -5,10 +5,13 @@ package file.v1;
 option go_package = "github.com/rtmelsov/adv-keeper/gen/go/file/v1;filev1";
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
 
 service FileService {
   // Клиент шлёт поток кусков, сервер в конце отвечает сводкой
   rpc Upload(stream UploadRequest) returns (UploadResponse);
+  rpc DownloadFile(DownloadFileRequest) returns (stream DownloadFileResponse);
+  rpc DeleteFile(DeleteFileRequest) returns (google.protobuf.Empty);
   // Список файлов текущего пользователя (берём user_id из контекста)
   rpc GetFiles(GetFilesRequest) returns (GetFilesResponse);
 }
@@ -19,9 +22,10 @@ message GetFilesRequest {
 }
 
 message FileItem {
-  string filename = 1;
-  int64  size     = 2;
-  google.protobuf.Timestamp created_at = 3;
+  string fileid = 1;
+  string filename = 2;
+  int64  size     = 3;
+  google.protobuf.Timestamp created_at = 4;
 }
 
 message GetFilesResponse {
@@ -52,4 +56,21 @@ message UploadResponse {
 }
 
 
+message DownloadFileResponse {
+  oneof payload {
+    FileInfo info = 1;   // ПЕРВОЕ сообщение — мета-инфа
+    FileChunk chunk = 2; // Далее — куски файла
+  }
+}
 
+message DownloadFileRequest {
+  string fileid = 1;
+}
+
+message DeleteFileRequest {
+  string fileid = 1;
+}
+
+message DeleteFileResponse {
+  string fileid = 1;
+}

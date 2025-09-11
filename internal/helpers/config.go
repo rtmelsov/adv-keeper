@@ -8,11 +8,12 @@ import (
 )
 
 type Config struct {
-	Addr      string `env:"AK_GRPC_ADDR,required"`
-	DBDSN     string `env:"DB_DSN,required"`
-	JWTSecret string `env:"JWT_SECRET,required" json:"-"`
-	FilesDir  string `env:"FILES_DIR" envDefault:"./files"`
-	AccessTTL string `env:"ACCESS_TTL" envDefault:"15m"`
+	Addr             string `env:"AK_GRPC_ADDR,required"`
+	DBDSN            string `env:"DB_DSN,required"`
+	JWTSecret        string `env:"JWT_SECRET,required" json:"-"`
+	FilesDir         string `env:"FILES_DIR" envDefault:"./files"`
+	AccessTTL        string `env:"ACCESS_TTL" envDefault:"15m"`
+	DownloadFilesDir string `env:"DOWNLOAD_FILES_DIR" envDefault:"./opt/adv-keeper/download"`
 }
 
 var (

@@ -22,5 +22,14 @@ ORDER BY created_at DESC;
 -- name: DeleteFile :one
 DELETE FROM files
 WHERE id = $1 AND user_id = $2
-RETURNING id;  -- проще понять, удалилось или нет
+RETURNING id;-- name: GetUserByID :one
 
+-- name: GetUserByID :one
+SELECT id, email, created_at
+FROM users
+WHERE id = $1;
+
+-- name: GetFileForUser :one
+SELECT id, user_id, filename, path, size_bytes, created_at
+FROM files
+WHERE id = $1 AND user_id = $2;
