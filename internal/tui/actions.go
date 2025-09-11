@@ -1,9 +1,9 @@
 package tui
 
 import (
-	"fmt"
 	commonv1 "github.com/rtmelsov/adv-keeper/gen/go/proto/common/v1"
 	"github.com/rtmelsov/adv-keeper/internal/akclient"
+	"github.com/rtmelsov/adv-keeper/internal/helpers"
 )
 
 func (m *TuiModel) MenuAction() {
@@ -38,11 +38,19 @@ func (m *TuiModel) RegisterAction() {
 			return
 		}
 
-		fmt.Println("\nresp", resp)
-
 		m.Profile.UserID = resp.UserId
 		m.Profile.DeviceID = resp.DeviceId
 		m.Profile.Email = resp.Email
+		err = helpers.SaveSession(&helpers.Session{
+			AccessToken: resp.Tokens.AccessToken,
+			ExpiresAt:   resp.Tokens.ExpiresAt.AsTime(),
+		})
+		if err != nil {
+			m.Error = err.Error()
+			m.Selected = "Register"
+			m.Cursor = 0
+			return
+		}
 		m.Profile.Auth = true
 		m.Selected = "Vault"
 		m.Cursor = 0

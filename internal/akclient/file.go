@@ -11,12 +11,22 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 
+	"github.com/rtmelsov/adv-keeper/internal/helpers"
+	"github.com/rtmelsov/adv-keeper/internal/middleware"
+
 	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
 )
 
 const chunkSize = 1 << 20 // 1 MiB — безопасно ниже 4 MiB лимита на сообщение
 
 func UploadFile(path string) (*filev1.UploadResponse, error) {
+
+	session, err := helpers.LoadSession()
+	if err != nil {
+		return nil, err
+	}
+
+	ctx := middleware.AddAuthData(session.AccessToken)
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -28,8 +38,12 @@ func UploadFile(path string) (*filev1.UploadResponse, error) {
 		return nil, err
 	}
 
+	envs, err := helpers.LoadConfig()
+	if err != nil {
+		return nil, err
+	}
 	conn, err := grpc.NewClient(
-		":8080",
+		envs.Addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
 			Time:                1 * time.Minute,
@@ -47,7 +61,7 @@ func UploadFile(path string) (*filev1.UploadResponse, error) {
 	defer conn.Close()
 
 	client := filev1.NewFileServiceClient(conn)
-	ctx, cancel := context.WithTimeout(context.Background(), 24*time.Hour)
+	ctx, cancel := context.WithTimeout(ctx, 24*time.Hour)
 	defer cancel()
 
 	stream, err := client.Upload(ctx)

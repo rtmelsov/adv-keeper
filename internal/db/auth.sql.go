@@ -7,47 +7,127 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
 
+const addFile = `-- name: AddFile :one
+INSERT INTO files (user_id, name, path)
+VALUES ($1, $2, $3)
+RETURNING id, user_id, name, path, created_at
+`
+
+type AddFileParams struct {
+	UserID uuid.UUID
+	Name   string
+	Path   string
+}
+
+func (q *Queries) AddFile(ctx context.Context, arg AddFileParams) (File, error) {
+	row := q.db.QueryRowContext(ctx, addFile, arg.UserID, arg.Name, arg.Path)
+	var i File
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.Path,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const deleteFile = `-- name: DeleteFile :exec
+DELETE FROM files
+WHERE id = $1 AND user_id = $2
+`
+
+type DeleteFileParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) DeleteFile(ctx context.Context, arg DeleteFileParams) error {
+	_, err := q.db.ExecContext(ctx, deleteFile, arg.ID, arg.UserID)
+	return err
+}
+
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, email, pwd_phc, e2ee_pub, created_at
+FROM users
+WHERE email = $1
+`
+
+func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserByEmail, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PwdPhc,
+		&i.E2eePub,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listFilesByUser = `-- name: ListFilesByUser :many
+SELECT id, name, path, created_at
+FROM files
+WHERE user_id = $1
+ORDER BY created_at DESC
+`
+
+type ListFilesByUserRow struct {
+	ID        uuid.UUID
+	Name      string
+	Path      string
+	CreatedAt time.Time
+}
+
+func (q *Queries) ListFilesByUser(ctx context.Context, userID uuid.UUID) ([]ListFilesByUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, listFilesByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFilesByUserRow
+	for rows.Next() {
+		var i ListFilesByUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Path,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const registerWithDevice = `-- name: RegisterWithDevice :one
-WITH u AS (
-  INSERT INTO users (email, pwd_phc, e2ee_pub)
-  VALUES ($1, $2, $3)
-  RETURNING id
-),
-d AS (
-  INSERT INTO devices (user_id, device_id)
-  SELECT u.id, $4
-  FROM u
-  RETURNING device_id
-)
-SELECT
-  (SELECT id FROM u)        AS user_id,
-  (SELECT device_id FROM d) AS device_id
+INSERT INTO users (email, pwd_phc, e2ee_pub)
+VALUES ($1, $2, $3)
+RETURNING id
 `
 
 type RegisterWithDeviceParams struct {
-	Email    string
-	PwdPhc   string
-	E2eePub  []byte
-	DeviceID string
+	Email   string
+	PwdPhc  string
+	E2eePub []byte
 }
 
-type RegisterWithDeviceRow struct {
-	UserID   uuid.UUID
-	DeviceID string
-}
-
-func (q *Queries) RegisterWithDevice(ctx context.Context, arg RegisterWithDeviceParams) (RegisterWithDeviceRow, error) {
-	row := q.db.QueryRowContext(ctx, registerWithDevice,
-		arg.Email,
-		arg.PwdPhc,
-		arg.E2eePub,
-		arg.DeviceID,
-	)
-	var i RegisterWithDeviceRow
-	err := row.Scan(&i.UserID, &i.DeviceID)
-	return i, err
+func (q *Queries) RegisterWithDevice(ctx context.Context, arg RegisterWithDeviceParams) (uuid.UUID, error) {
+	row := q.db.QueryRowContext(ctx, registerWithDevice, arg.Email, arg.PwdPhc, arg.E2eePub)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }

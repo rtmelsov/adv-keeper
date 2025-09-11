@@ -7,16 +7,14 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"os"
 	"path/filepath"
 	"time"
 
 	db "github.com/rtmelsov/adv-keeper/internal/db"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/keepalive"
 
 	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
+	"github.com/rtmelsov/adv-keeper/internal/helpers"
 )
 
 type FileServer struct {
@@ -26,11 +24,12 @@ type FileServer struct {
 }
 
 func New(q *db.Queries) *FileServer {
-	filesDir := os.Getenv("FILES_DIR")
-	if filesDir == "" {
-		filesDir = "./data"
+	envs, err := helpers.LoadConfig()
+	if err != nil {
+		log.Fatal(err)
 	}
-	return &FileServer{Q: q, uploadDir: filesDir}
+
+	return &FileServer{Q: q, uploadDir: envs.FilesDir}
 }
 
 func (s *FileServer) Upload(stream filev1.FileService_UploadServer) error {
@@ -123,28 +122,4 @@ func (s *FileServer) Upload(stream filev1.FileService_UploadServer) error {
 		BytesReceived: written,
 		Sha256:        sum,
 	})
-}
-
-func main() {
-	lis, err := net.Listen("tcp", ":8080")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	s := grpc.NewServer(
-		grpc.KeepaliveParams(keepalive.ServerParameters{
-			MaxConnectionIdle:     0,
-			MaxConnectionAge:      0,
-			MaxConnectionAgeGrace: 0,
-			Time:                  2 * time.Minute, // pings для длинных передач
-			Timeout:               20 * time.Second,
-		}),
-	)
-
-	filev1.RegisterFileServiceServer(s, &FileServer{uploadDir: "uploads"})
-
-	log.Println("gRPC file server on :8080")
-	if err := s.Serve(lis); err != nil {
-		log.Fatal(err)
-	}
 }

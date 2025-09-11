@@ -17,16 +17,17 @@ func isUnique(err error) bool {
 
 // RegisterWithDevice Обёртка вокруг sqlc-запроса RegisterWithDevice.
 // Возвращает user_id и device_id строками.
-func (r *Repo) RegisterWithDevice(ctx context.Context, args dbpkg.RegisterWithDeviceParams) (string, string, error) {
-	row, err := r.Q.RegisterWithDevice(ctx, args)
+func (r *Repo) RegisterWithDevice(ctx context.Context, args dbpkg.RegisterWithDeviceParams) (string, error) {
+	ID, err := r.Q.RegisterWithDevice(ctx, args)
 	if err != nil {
 		if isUnique(err) {
+			return "", errors.New("конфликт по уникальному email")
 			// конфликт по уникальному email — отдадим как есть, обработаем выше
 		}
-		return "", "", err
+		return "", err
 	}
 	// не завязываемся на конкретный тип UUID — приводим к строке
-	return toString(row.UserID), toString(row.DeviceID), nil
+	return toString(ID), nil
 }
 
 func toString(v any) string { return fmt.Sprint(v) }

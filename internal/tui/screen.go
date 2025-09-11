@@ -2,6 +2,7 @@ package tui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/rtmelsov/adv-keeper/internal/akclient"
 	"os"
 	"path/filepath"
 )
@@ -62,6 +63,16 @@ func (m TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// m.FilePicker.AllowedTypes = nil // не ставь []string{"*"}
 					m.OpenFilePicker = true
 					return m, m.FilePicker.Init() // ← важный момент
+				} else if m.SelectedFile != "" {
+					m.Loading = true
+					// запускаем асинхронную команду
+					return m, tea.Batch(
+						m.Spinner.Tick,
+						func() tea.Msg {
+							_, err := akclient.UploadFile(m.SelectedFile)
+							return struct{ err error }{err: err}
+						},
+					)
 				} else {
 					return m, tea.Batch(
 						tea.Printf("Let's go to %s!", m.table.SelectedRow()[1]),
@@ -117,7 +128,7 @@ func (m TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.Cursor < len(m.Choices)-1 {
 				m.Cursor++
 			}
-		case "enter", " ": // пробел тоже работает
+		case "enter": // пробел тоже работает
 			m.History = append(m.History, m.Selected)
 			m = *selectedScreen(&m)
 

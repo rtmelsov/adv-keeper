@@ -27,6 +27,9 @@ func (m TuiModel) View() string {
 	s += "\n↑/k ↓/j — навигация, ␣/Enter — выбрать, a — выделить всё, x — удалить, q — выход.\n"
 
 	before := ""
+	if m.Loading {
+		before = fmt.Sprintf("LOADING...%s\n", m.Error)
+	}
 	if m.Error != "" {
 		before = fmt.Sprintf("Error: %s\n", m.Error)
 	}

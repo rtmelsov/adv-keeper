@@ -2,35 +2,40 @@ syntax = "proto3";
 package common.v1;
 option go_package = "github.com/rtmelsov/adv-keeper/gen/go/common/v1;commonv1";
 
-message DeviceInfo {
-  string device_id = 1; // клиентский идентификатор устройства
-}
+import "google/protobuf/timestamp.proto";
 
 service AuthService {
+  rpc Logout(TokenPair) returns (TokenPair);
   rpc Register(RegisterRequest) returns (RegisterResponse);
   rpc Login(LoginRequest) returns (LoginResponse);
 }
 
-message RegisterRequest {
-  string email    = 1;
-  string password = 2;
-  DeviceInfo device = 3;
-}
-
-message RegisterResponse {
-  string user_id   = 1;
-  string device_id = 2; // вернём то, что прислал клиент
-  string email     = 3;
+message TokenPair {
+  string access_token = 1;   // JWT (HS256)
+  //google.protobuf.Timestamp
+  google.protobuf.Timestamp expires_at = 3;     // RFC3339 серверное время истечения refresh
 }
 
 message LoginRequest {
   string email    = 1;
   string password = 2;
-  DeviceInfo device = 3;
 }
 
 message LoginResponse {
   string user_id   = 1;
-  string device_id = 2; // вернём то, что прислал клиент
+  string device_id = 2;
   string email     = 3;
+  TokenPair tokens = 4; // ← добавили
+}
+
+message RegisterRequest {
+  string email    = 1;
+  string password = 2;
+}
+
+message RegisterResponse {
+  string user_id   = 1;
+  string device_id = 2; // вернём то, что прислал клиент
+  string email    = 3;
+  TokenPair tokens = 4; // ← добавили
 }
