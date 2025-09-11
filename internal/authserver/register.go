@@ -1,5 +1,4 @@
-// Package server
-package server
+package authserver
 
 import (
 	"context"
@@ -8,6 +7,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonv1 "github.com/rtmelsov/adv-keeper/gen/go/proto/common/v1"
@@ -46,23 +46,24 @@ func (s *Service) Register(ctx context.Context, in *commonv1.RegisterRequest) (*
 	}
 
 	// внутри Register(...)
-	arg := db.RegisterWithDeviceParams{
+	arg := db.RegisterParams{
 		Email:   email,
 		PwdPhc:  string(hash), // bcrypt/argon2 — как у тебя
 		E2eePub: nil,          // или []byte{} / из запроса
 	}
 
-	ID, err := s.Q.RegisterWithDevice(ctx, arg)
+	ID, err := s.Q.Register(ctx, arg)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return nil, status.Error(codes.AlreadyExists, "email already exists")
 		}
-		return nil, status.Error(codes.Internal, "db error")
+		return nil, status.Error(codes.Internal, fmt.Sprintf("db error: %s", err.Error()))
 	}
 
 	// 3) сгенерить токены
 	access, exp, err := helpers.NewAccessJWT(ID.String())
+	log.Info("access", access)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "jwt")
 	}

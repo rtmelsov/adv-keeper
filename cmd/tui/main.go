@@ -32,20 +32,15 @@ func main() {
 
 	// После выхода выведем список выбранных покупок
 	m := final.(tui.TuiModel)
-	if len(m.Selected) == 0 {
+	if len(m.SelectedPage) == 0 {
 		fmt.Println("Ничего не выбрано.")
 		return
 	}
 
 	// Соберём в стабильном порядке
-	idxs := make([]int, 0, len(m.Selected))
-	for i := range m.Selected {
+	idxs := make([]int, 0, len(m.SelectedPage))
+	for i := range m.SelectedPage {
 		idxs = append(idxs, i)
 	}
 	sort.Ints(idxs)
-
-	fmt.Println("Вы выбрали:")
-	for _, i := range idxs {
-		fmt.Printf(" • %s\n", m.Choices[i])
-	}
 }

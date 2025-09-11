@@ -1,11 +1,31 @@
 package tui
 
 import (
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/rtmelsov/adv-keeper/internal/akclient"
-	"os"
+	"github.com/charmbracelet/log"
+
 	"path/filepath"
+	"time"
+
+	"github.com/rtmelsov/adv-keeper/internal/akclient"
+	"github.com/rtmelsov/adv-keeper/internal/helpers"
 )
+
+func up(num int) int {
+	if num > 0 {
+		return num - 1
+	}
+	return num
+}
+
+func down(num int, max int) int {
+	if num < max {
+		return num + 1
+	}
+	return num
+}
 
 func (m TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.OpenFilePicker {
@@ -23,129 +43,171 @@ func (m TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	}
+
+	if m.SelectedPage == "FileList" && m.HorCursor == 1 {
+		// 1) Сначала свои хоткеи
+		if km, ok := msg.(tea.KeyMsg); ok {
+			switch km.String() {
+			case "enter":
+				i := m.table.Cursor()
+				if i >= 0 && i < len(m.Files.Files) {
+					m.SelectedFileInfo = m.Files.Files[i]
+					m.SelectedPage = "FileDetails"
+					return m, nil
+					// return m, func() tea.Msg { return fileChosenMsg{ID: id} }
+				}
+			case "esc":
+				// выход из списка файлов
+				m.RightCursor = 0
+				m.HorCursor = 0
+				return m, nil
+			}
+		}
+
+		// 2) Затем отдаём событие таблице (стрелки вверх/вниз и т.п.)
+		var cmd tea.Cmd
+		m.table, cmd = m.table.Update(msg)
+		return m, cmd
+	}
+
+	// 2) сначала ловим завершение фоновой задачи
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.W, m.H = msg.Width, msg.Height
+	case uploadFinishedMsg:
+		m.Loading = false
+		if msg.err != nil {
+			m.Error = msg.err.Error()
+		} else {
+			m.Error = ""
+			m.SelectedFile = ""
+		}
+		return m, nil
+
+	// 3) тики спиннера: только когда Loading=true
+	case spinner.TickMsg:
+		if m.Loading {
+			var cmd tea.Cmd
+			m.Spin, cmd = m.Spin.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
 
-		if m.Selected == "Vault" {
-			switch msg.String() {
-			case "esc":
-				if m.table.Focused() {
-					m.table.Blur()
-				} else {
-					m.table.Focus()
-				}
-			case "right", "l":
-				if m.CursorHor < 1 {
-					m.CursorHor++
-				} else {
-					m.CursorHor = 0
-				}
-			case "left", "h":
-				if m.CursorHor > 0 {
-					m.CursorHor--
-				}
-			case "enter":
-				if m.CursorHor == 0 && m.SelectedFile == "" {
-					if home, err := os.UserHomeDir(); err == nil && home != "" {
-						m.FilePicker.CurrentDirectory = home
-						m.FilePicker.Path = home
-					} else if wd, _ := os.Getwd(); wd != "" {
-						m.FilePicker.CurrentDirectory = wd
-						m.FilePicker.Path = wd
-					} else {
-						m.FilePicker.CurrentDirectory = "/"
-						m.FilePicker.Path = "/"
-					}
-					m.FilePicker.SetHeight(14) // чтобы было видно список
-					// m.FilePicker.AllowedTypes = nil // не ставь []string{"*"}
-					m.OpenFilePicker = true
-					return m, m.FilePicker.Init() // ← важный момент
-				} else if m.SelectedFile != "" {
-					m.Loading = true
-					// запускаем асинхронную команду
-					return m, tea.Batch(
-						m.Spinner.Tick,
-						func() tea.Msg {
-							_, err := akclient.UploadFile(m.SelectedFile)
-							return struct{ err error }{err: err}
-						},
-					)
-				} else {
-					return m, tea.Batch(
-						tea.Printf("Let's go to %s!", m.table.SelectedRow()[1]),
-					)
-				}
-
+		if m.InputFocused {
+			if msg.String() == "esc" || msg.String() == "enter" {
+				m.login.Blur()
+				m.password.Blur()
+				m.InputFocused = false
 			}
+
+			var cmds []tea.Cmd
+			var cmd tea.Cmd
+			if m.password.Focused() {
+				m.password, cmd = m.password.Update(msg)
+				cmds = append(cmds, cmd)
+			}
+			if m.login.Focused() {
+				m.login, cmd = m.login.Update(msg)
+				cmds = append(cmds, cmd)
+			}
+
+			return m, tea.Batch(cmds...)
 		}
-		if m.Selected == "Register" && m.InputFocused {
+		if msg.String() == "up" || msg.String() == "k" {
+			if m.HorCursor == 0 {
+				m.LeftCursor = up(m.LeftCursor)
+			} else {
+				m.RightCursor = up(m.RightCursor)
+			}
+
+			return m, nil
+		}
+		if msg.String() == "down" || msg.String() == "j" {
+			if m.HorCursor == 0 {
+				length := len(m.LoginChoices) - 1
+				if m.Profile.Auth {
+					length = len(m.MainChoices) - 1
+				}
+				m.LeftCursor = down(m.LeftCursor, length)
+			} else {
+				m.RightCursor = down(m.RightCursor, m.MaxPageSize[m.SelectedPage])
+			}
+			return m, nil
+		}
+
+		if m.HorCursor == 0 {
+			if msg.String() == "enter" {
+				if m.Profile.Auth {
+					if m.MainChoices[m.LeftCursor] == "Logout" {
+						_, err := akclient.Logout()
+						if err != nil {
+							m.Error = err.Error()
+							return m, tea.ClearScreen
+						}
+						helpers.SaveSession(&helpers.Session{
+							AccessToken: "",
+							ExpiresAt:   time.Now(),
+						})
+						m.LeftCursor = 0
+						m.Profile = &ProfileModel{}
+						m.login.Reset()
+						m.password.Reset()
+						m.Choices = m.LoginChoices
+						m.SelectedPage = "Register"
+						return m, tea.ClearScreen
+					}
+					if m.MainChoices[m.LeftCursor] == "FileList" {
+						list, err := akclient.GetFiles()
+						log.Info(list)
+						if err != nil {
+							m.Error = err.Error()
+							return m, tea.ClearScreen
+						}
+						m.Files = list
+						m.table.SetRows([]table.Row(helpers.FilesToRows(list)))
+					}
+					m.SelectedPage = m.MainChoices[m.LeftCursor]
+				} else {
+					m.SelectedPage = m.LoginChoices[m.LeftCursor]
+				}
+				m.password.Reset()
+				m.login.Reset()
+				m.HorCursor = 1
+				return m, tea.ClearScreen
+			}
 			if msg.String() == "esc" {
 				m.login.Blur()
 				m.password.Blur()
 				m.InputFocused = false
+				m.HorCursor = 0
+				m.RightCursor = 0
 				return m, nil
 			}
-			if msg.String() == "enter" {
-				if m.Cursor == 2 {
-					m.InputFocused = false
-					m.password.Blur()
-					return m, nil
-				}
-				m.login.Blur()
-				m.password.Focus()
-				m.Cursor++
-				return m, nil
-			}
-
-			var cmd tea.Cmd
-			var cmds []tea.Cmd
-			if m.Cursor == 0 {
-				m.login, cmd = m.login.Update(msg)
-				cmds = append(cmds, cmd)
-			}
-			if m.Cursor == 1 {
-				m.password, cmd = m.password.Update(msg)
-				cmds = append(cmds, cmd)
-			}
-			return m, tea.Batch(cmds...)
 		}
-		switch msg.String() {
-		case "esc":
-			if len(m.History) <= 0 {
-				return m, tea.Quit
-			}
-			m.Selected = m.History[len(m.History)-1]
-			m.History = m.History[:len(m.History)-1]
-			m = *selectedScreen(&m)
-		case "up", "k":
-			if m.Cursor > 0 {
-				m.Cursor--
-			}
-		case "down", "j":
-			if m.Cursor < len(m.Choices)-1 {
-				m.Cursor++
-			}
-		case "enter": // пробел тоже работает
-			m.History = append(m.History, m.Selected)
-			m = *selectedScreen(&m)
 
-			return m, tea.ClearScreen
+		if m.SelectedPage == "FileDetails" {
+			return m.FileDetailsAction(msg.String())
+		}
+		if m.SelectedPage == "Vault" {
+			return m.VaultAction(msg.String())
+		}
+		if m.SelectedPage == "Login" {
+			return m.LoginAction(msg.String())
+		}
+		if m.SelectedPage == "Logout" {
+			return m.LoginAction(msg.String())
+		}
+		if m.SelectedPage == "Register" {
+			return m.RegisterAction(msg.String())
+		}
+		if m.SelectedPage == "Main" {
+			return m.MainAction(msg.String())
 		}
 	}
 	return m, nil
-}
-
-func selectedScreen(m *TuiModel) *TuiModel {
-	switch m.Selected {
-	case "Menu":
-		m.MenuAction()
-	case "Register":
-		m.RegisterAction()
-	case "Vault":
-		m.Vault()
-	}
-	return m
 }

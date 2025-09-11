@@ -3,8 +3,6 @@ package helpers
 
 // jwt.go
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -19,6 +17,11 @@ func mustParseDuration(s string) time.Duration {
 	return d
 }
 
+type Claims struct {
+	UserID string `json:"user_id"`
+	jwt.RegisteredClaims
+}
+
 func NewAccessJWT(userID string) (string, time.Time, error) {
 	envs, err := LoadConfig()
 	if err != nil {
@@ -27,25 +30,20 @@ func NewAccessJWT(userID string) (string, time.Time, error) {
 
 	now := time.Now().UTC()
 	exp := now.Add(mustParseDuration(envs.AccessTTL))
-	claims := jwt.MapClaims{
-		"sub": userID,
-		"aud": "adv-keeper",
-		"iat": now.Unix(),
-		"exp": exp.Unix(),
+
+	claims := &Claims{
+		UserID: userID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID,                         // дублируем id в стандартный sub
+			Audience:  jwt.ClaimStrings{"adv-keeper"}, // aud
+			IssuedAt:  jwt.NewNumericDate(now),        // iat
+			ExpiresAt: jwt.NewNumericDate(exp),        // exp
+		},
 	}
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	s, err := token.SignedString([]byte(envs.JWTSecret))
+	s, err := token.SignedString([]byte(envs.JWTSecret)) // ключ как []byte
 	return s, exp, err
-}
-
-func SHA256Hex(s string) string {
-	h := sha256.Sum256([]byte(s))
-	return hex.EncodeToString(h[:])
-}
-
-type Claims struct {
-	UserID string `json:"user_id"`
-	jwt.RegisteredClaims
 }
 
 func VerifyToken(tokenStr string) (*Claims, error) {
@@ -53,20 +51,26 @@ func VerifyToken(tokenStr string) (*Claims, error) {
 	if err != nil {
 		return nil, err
 	}
-	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (any, error) {
-		return envs.JWTSecret, nil
+
+	// Парсер сразу проверит метод подписи и audience
+	parser := jwt.NewParser(
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}),
+		jwt.WithAudience("adv-keeper"),
+	)
+
+	claims := &Claims{}
+	token, err := parser.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (any, error) {
+		return []byte(envs.JWTSecret), nil // ключ как []byte
 	})
 	if err != nil {
 		return nil, err
 	}
-
-	claims, ok := token.Claims.(*Claims)
-	if !ok || !token.Valid {
+	if !token.Valid {
 		return nil, fmt.Errorf("invalid token")
 	}
 
-	// Проверим срок действия
-	if claims.ExpiresAt.Before(time.Now()) {
+	// Обычно парсер уже проверяет exp/nbf/iat; на всякий случай:
+	if claims.ExpiresAt != nil && claims.ExpiresAt.Time.Before(time.Now().UTC()) {
 		return nil, fmt.Errorf("token expired")
 	}
 

@@ -2,18 +2,19 @@ package main
 
 import (
 	"database/sql"
-	"google.golang.org/grpc/reflection"
 	"log"
 	"net"
 	"time"
 
+	"google.golang.org/grpc/reflection"
+
 	commonv1 "github.com/rtmelsov/adv-keeper/gen/go/proto/common/v1"
 	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
+	"github.com/rtmelsov/adv-keeper/internal/authserver"
 	db "github.com/rtmelsov/adv-keeper/internal/db"
-	"github.com/rtmelsov/adv-keeper/internal/file"
+	"github.com/rtmelsov/adv-keeper/internal/fileserver"
 	"github.com/rtmelsov/adv-keeper/internal/helpers"
 	"github.com/rtmelsov/adv-keeper/internal/middleware"
-	"github.com/rtmelsov/adv-keeper/internal/server"
 	"google.golang.org/grpc/keepalive"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -30,7 +31,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	helpers.RunMigrations(envs.DBDSN)
 	// Подключение к Postgres
 	dbx, err := sql.Open("pgx", envs.DBDSN)
 	if err != nil {
@@ -41,6 +42,7 @@ func main() {
 	q := db.New(dbx)
 	s := grpc.NewServer(
 		grpc.UnaryInterceptor(middleware.ServerInterceptor),
+		grpc.StreamInterceptor(middleware.StreamInterceptor), // вот тут
 		grpc.KeepaliveParams(keepalive.ServerParameters{
 			MaxConnectionIdle:     0,
 			MaxConnectionAge:      0,
@@ -49,8 +51,8 @@ func main() {
 			Timeout:               20 * time.Second,
 		}),
 	)
-	commonv1.RegisterAuthServiceServer(s, server.New(q))
-	filev1.RegisterFileServiceServer(s, file.New(q))
+	commonv1.RegisterAuthServiceServer(s, authserver.New(q))
+	filev1.RegisterFileServiceServer(s, fileserver.New(q))
 
 	reflection.Register(s)
 

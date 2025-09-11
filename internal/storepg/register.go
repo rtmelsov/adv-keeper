@@ -17,8 +17,8 @@ func isUnique(err error) bool {
 
 // RegisterWithDevice Обёртка вокруг sqlc-запроса RegisterWithDevice.
 // Возвращает user_id и device_id строками.
-func (r *Repo) RegisterWithDevice(ctx context.Context, args dbpkg.RegisterWithDeviceParams) (string, error) {
-	ID, err := r.Q.RegisterWithDevice(ctx, args)
+func (r *Repo) RegisterWithDevice(ctx context.Context, args dbpkg.RegisterParams) (string, error) {
+	ID, err := r.Q.Register(ctx, args)
 	if err != nil {
 		if isUnique(err) {
 			return "", errors.New("конфликт по уникальному email")
