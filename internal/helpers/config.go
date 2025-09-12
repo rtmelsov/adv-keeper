@@ -7,6 +7,11 @@ import (
 	"github.com/joho/godotenv"
 )
 
+var (
+	Addr             = "89.207.255.214:8080"
+	DownloadFilesDir = "./"
+)
+
 type Config struct {
 	Addr               string `env:"AK_GRPC_ADDR,required"`
 	DBDSN              string `env:"DB_DSN,required"`

@@ -6,7 +6,6 @@ import (
 	"log"
 	"time"
 
-	"errors"
 	"github.com/rtmelsov/adv-keeper/internal/helpers"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -15,13 +14,9 @@ import (
 )
 
 func Register(RegisterRequest *commonv1.RegisterRequest) (*commonv1.RegisterResponse, error) {
-	envs, err := helpers.LoadConfig()
+	conn, err := grpc.NewClient(helpers.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return nil, errors.New("не получилось распарсить переменные окуржения")
-	}
-	conn, err := grpc.NewClient(envs.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		log.Fatalf("dial %s: %v", envs.Addr, err)
+		log.Fatalf("dial %s: %v", helpers.Addr, err)
 	}
 	defer conn.Close()
 
