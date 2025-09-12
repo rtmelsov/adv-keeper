@@ -1,19 +1,15 @@
-# Makefile (минимальный)
 APP := tui
 PKG := ./cmd/tui
 DIST := dist
-SERVER_PKG ?= ./cmd/server
-GRPC_ADDR ?= 127.0.0.1:8080
-DB_DSN ?= mem://
+LDFLAGS := -s -w
+CGO := 0
 
-
-
-.PHONY: build run clean linux mac windows
+.PHONY: build run clean linux-amd64 linux-arm64 windows-amd64 darwin-arm64 release tidy
 
 build:
 	mkdir -p $(DIST)
 	go mod tidy
-	CGO_ENABLED=0 go build -o $(DIST)/$(APP) $(PKG)
+	CGO_ENABLED=$(CGO) go build -ldflags '$(LDFLAGS)' -o $(DIST)/$(APP) $(PKG)
 
 run: build
 	$(DIST)/$(APP)
@@ -21,28 +17,26 @@ run: build
 clean:
 	rm -rf $(DIST)
 
-# Кросс-сборки, если нужно
-linux:
+# Универсальный шаблон: build-<goos>_<goarch>
+build-%:
 	mkdir -p $(DIST)
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o $(DIST)/$(APP)_linux_amd64 $(PKG)
+	@GOOS=$(word 1,$(subst _, ,$*)) GOARCH=$(word 2,$(subst _, ,$*)) \
+	CGO_ENABLED=$(CGO) go build -ldflags '$(LDFLAGS)' \
+	-o $(DIST)/$(APP)_$*$(if $(findstring windows,$(word 1,$(subst _, ,$*))),.exe,) $(PKG)
 
-mac:
-	mkdir -p $(DIST)
-	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o $(DIST)/$(APP)_darwin_arm64 $(PKG)
+linux-amd64:  build-linux_amd64
+linux-arm64:  build-linux_arm64
+windows-amd64: build-windows_amd64
+darwin-arm64: build-darwin_arm64
 
-windows:
-	mkdir -p $(DIST)
-	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o $(DIST)/$(APP)_windows_amd64.exe $(PKG)
-
-help:
-	@echo "make run  - run server via 'go run'"
-	@echo "make build  -build server binary into ./bin/server"
-	@echo "env overrides: GRPC_ADDR (default: $(GRPC_ADDR)), DB_DSN (default: $(DB_DSN))"
-	@echo "example: make run GRPC_ADDR=:9090 DB_DSN='postgres://...@localhost:5432/vault?sslmode=disable"
-buildServer:
-	@mkdir -p bin
-	@echo "===> go build ./cmd/server -> ./bin/server"
-	@go build -o bin/server $(SERVER_PKG)
+# Сборка всего и упаковка
+release: linux-amd64 linux-arm64 windows-amd64 darwin-arm64
+	cd $(DIST) && \
+	tar -czf $(APP)_linux_amd64.tgz  $(APP)_linux_amd64 && \
+	tar -czf $(APP)_linux_arm64.tgz  $(APP)_linux_arm64 && \
+	tar -czf $(APP)_darwin_arm64.tgz $(APP)_darwin_arm64 && \
+	zip -9    $(APP)_windows_amd64.zip $(APP)_windows_amd64.exe
 
 tidy:
-	@go mod tidy
+	go mod tidy
+

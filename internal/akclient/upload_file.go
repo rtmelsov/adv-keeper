@@ -37,13 +37,8 @@ func UploadFile(path string) (*filev1.UploadResponse, error) {
 		return nil, err
 	}
 
-	envs, err := helpers.LoadConfig()
-	if err != nil {
-		return nil, err
-	}
-
 	conn, err := grpc.NewClient(
-		envs.Addr,
+		helpers.Addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
 			Time:                1 * time.Minute,

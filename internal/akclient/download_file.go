@@ -45,19 +45,14 @@ func safeBase(name string) string {
 }
 
 func DownloadFile(fileID string) (*filev1.GetFilesResponse, error) {
-	envs, err := helpers.LoadConfig()
-
-	if err != nil {
-		return nil, err
-	}
 	ctx, err := middleware.AddAuthData()
 	if err != nil {
 		return nil, err
 	}
-	outDir := envs.DownloadFilesDir
-	conn, err := grpc.NewClient(envs.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	outDir := helpers.DownloadFilesDir
+	conn, err := grpc.NewClient(helpers.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("dial %s: %v", envs.Addr, err)
+		log.Fatalf("dial %s: %v", helpers.Addr, err)
 	}
 	defer conn.Close()
 
