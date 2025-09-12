@@ -93,6 +93,7 @@ func (m TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case finishedMsg:
 			m.Loading = false
+			m.StreamLoading = false
 			switch msg.Kind {
 			case OpUpload:
 				m.Uploading = false

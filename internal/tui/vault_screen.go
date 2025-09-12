@@ -67,22 +67,6 @@ func listenNext(kind OpKind, id string, ch <-chan models.Prog) tea.Cmd {
 	}
 }
 
-func startUploadCmd(id, path string) tea.Cmd {
-	return func() tea.Msg {
-		ch := make(chan models.Prog, 32)
-		go akclient.UploadFile(path, ch)
-		return progressChanReadyMsg{Kind: OpUpload, ID: id, ch: ch}
-	}
-}
-
-func startDownloadCmd(id, fileID, outPath string) tea.Cmd {
-	return func() tea.Msg {
-		ch := make(chan models.Prog, 32)
-		go akclient.DownloadFile(fileID, ch)
-		return progressChanReadyMsg{Kind: OpDownload, ID: id, ch: ch}
-	}
-}
-
 func (m TuiModel) VaultAction(msg string) (tea.Model, tea.Cmd) {
 	switch msg {
 	case "esc":
@@ -108,6 +92,7 @@ func (m TuiModel) VaultAction(msg string) (tea.Model, tea.Cmd) {
 			return m, m.FilePicker.Init() // ← важный момент
 		} else if m.SelectedFile != "" {
 			m.Loading = true
+			m.StreamLoading = true
 			return m, tea.Batch(
 				m.Spin.Tick,
 				func() tea.Msg {

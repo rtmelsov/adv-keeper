@@ -23,7 +23,7 @@ func (m TuiModel) View() string {
 	// --- Header/status (outside the box) ---
 	status := ""
 	if m.Loading {
-		if m.Uploading || m.Downloading {
+		if m.StreamLoading {
 			return m.loadingView()
 		} else {
 			status = ui.StatusBar.Render(m.Spin.View()+" Загрузка…") +
