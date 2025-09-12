@@ -62,6 +62,7 @@ func (m TuiModel) FileDetailsAction(msg string) (tea.Model, tea.Cmd) {
 		}
 		if m.RightCursor == 1 {
 			m.Loading = true
+			m.StreamLoading = true
 			return m, tea.Batch(
 				m.Spin.Tick,
 				func() tea.Msg {

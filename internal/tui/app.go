@@ -18,6 +18,8 @@ type ProfileModel struct {
 }
 
 type TuiModel struct {
+	StreamLoading bool
+
 	uploadCh    <-chan models.Prog
 	Uploaded    int64
 	UploadTotal int64
