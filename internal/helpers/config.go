@@ -9,7 +9,7 @@ import (
 
 var (
 	Addr             = "89.207.255.214:8080"
-	DownloadFilesDir = "./"
+	DownloadFilesDir = "."
 )
 
 type Config struct {
