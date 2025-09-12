@@ -2,10 +2,11 @@ package main
 
 import (
 	"database/sql"
-	"log"
+	"fmt"
 	"net"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"google.golang.org/grpc/reflection"
 
 	commonv1 "github.com/rtmelsov/adv-keeper/gen/go/proto/common/v1"
@@ -31,7 +32,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	helpers.RunMigrations(envs.DBDSN)
+	path := fmt.Sprintf("file:/%s", envs.MigrationsFilesDir)
+	log.Info("path", "path", path)
+	helpers.RunMigrations(envs.DBDSN, path)
 	// Подключение к Postgres
 	dbx, err := sql.Open("pgx", envs.DBDSN)
 	if err != nil {
@@ -56,7 +59,7 @@ func main() {
 
 	reflection.Register(s)
 
-	log.Println("gRPC listening on", lis.Addr())
+	log.Info("gRPC listening on", "add", lis.Addr())
 	if err := s.Serve(lis); err != nil {
 		log.Fatal(err)
 	}

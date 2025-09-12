@@ -7,9 +7,9 @@ import (
 	"log"
 )
 
-func RunMigrations(dsn string) {
+func RunMigrations(dsn, filePath string) {
 	m, err := migrate.New(
-		"file://migrations", // путь до миграций
+		filePath,
 		dsn,
 	)
 	if err != nil {
