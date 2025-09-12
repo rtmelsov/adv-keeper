@@ -43,6 +43,181 @@ func (m TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	if m.Loading {
+		switch msg := msg.(type) {
+		case spinner.TickMsg:
+			var cmd tea.Cmd
+			m.Spin, cmd = m.Spin.Update(msg)
+			return m, cmd
+
+		case tea.KeyMsg:
+			// (опционально) дать пользователю отменить загрузку
+			if msg.String() == "esc" {
+				m.Loading = false
+				m.Uploaded = 0
+				m.UploadTotal = 0
+				m.UploadStart = time.Time{}
+				m.Uploading = false
+
+				// download
+				m.Downloaded = 0
+				m.DownloadTotal = 0
+				m.DownloadStart = time.Time{}
+				m.Downloading = false
+				m.Error = "Отменено"
+				return m, nil
+			}
+			return m, nil
+
+		case progressChanReadyMsg:
+			switch msg.Kind {
+			case OpUpload:
+				m.uploadCh = msg.ch
+				m.Uploading = true
+				m.UploadStart = time.Now()
+				return m, tea.Batch(m.Spin.Tick, listenNext(OpUpload, msg.ID, msg.ch))
+			case OpDownload:
+				m.downloadCh = msg.ch
+				m.Downloading = true
+				m.DownloadStart = time.Now()
+				return m, tea.Batch(m.Spin.Tick, listenNext(OpDownload, msg.ID, msg.ch))
+			}
+		case progressMsg:
+			switch msg.Kind {
+			case OpUpload:
+				m.Uploaded, m.UploadTotal = msg.Done, msg.Total
+				return m, listenNext(OpUpload, msg.ID, m.uploadCh)
+			case OpDownload:
+				m.Downloaded, m.DownloadTotal = msg.Done, msg.Total
+				return m, listenNext(OpDownload, msg.ID, m.downloadCh)
+			}
+		case finishedMsg:
+			m.Loading = false
+			switch msg.Kind {
+			case OpUpload:
+				m.Uploading = false
+				if msg.Err != nil {
+					m.Error = msg.Err.Error()
+					m.uploadCh = nil
+				} else {
+					m.Error = ""
+					m.SelectedPage = "FileList"
+					m.Loading = true
+					m.uploadCh = nil
+					return m, tea.Batch(
+						m.Spin.Tick,
+						func() tea.Msg {
+							list, err := akclient.GetFiles()
+							return getListFinishedMsg{err: err, list: list}
+						},
+					)
+				}
+			case OpDownload:
+				m.Downloading = false
+				if msg.Err != nil {
+					m.Error = msg.Err.Error()
+				} else {
+					m.Error = ""
+					m.SelectedPage = "Main"
+				}
+				m.downloadCh = nil
+			}
+			return m, nil
+			// продолжаем слушать
+
+		case logoutFinishedMsg:
+			m.Loading = false
+			if msg.err != nil {
+				m.Error = msg.err.Error()
+				return m, tea.ClearScreen
+			}
+			helpers.SaveSession(&helpers.Session{
+				AccessToken: "",
+				ExpiresAt:   time.Now(),
+			})
+			m.LeftCursor = 0
+			m.Profile = &ProfileModel{}
+			m.login.Reset()
+			m.password.Reset()
+			m.Choices = m.LoginChoices
+			m.SelectedPage = "Register"
+			return m, tea.ClearScreen
+		case loginFinishedMsg:
+			m.Loading = false
+			if msg.err != nil {
+				m.Error = msg.err.Error()
+				return m, nil
+			}
+			m.Profile.Email = msg.resp.Email
+			err := helpers.SaveSession(&helpers.Session{
+				AccessToken: msg.resp.Tokens.AccessToken,
+				ExpiresAt:   msg.resp.Tokens.ExpiresAt.AsTime(),
+			})
+			if err != nil {
+				m.Error = err.Error()
+				m.RightCursor = 0
+				return m, nil
+			}
+			m.Profile.Auth = true
+			m.SelectedPage = "Main"
+			m.RightCursor = 0
+			m.LeftCursor = 0
+			return m, nil
+
+		case getListFinishedMsg:
+			m.Loading = false
+			if msg.err != nil {
+				m.Error = msg.err.Error()
+				return m, tea.ClearScreen
+			}
+			m.Files = msg.list
+			m.SelectedPage = "FileList"
+			m.HorCursor = 1
+			m.table.SetRows([]table.Row(helpers.FilesToRows(msg.list)))
+			return m, nil
+
+		case deleteFileFinishedMsg:
+			m.Loading = false
+			if msg.err != nil {
+				m.Error = msg.err.Error()
+			} else {
+				m.Error = ""
+				return m, tea.Batch(
+					m.Spin.Tick,
+					func() tea.Msg {
+						list, err := akclient.GetFiles()
+						return getListFinishedMsg{err: err, list: list}
+					},
+				)
+			}
+			return m, nil
+		case downloadFileFinishedMsg:
+			m.Loading = false
+			if msg.err != nil {
+				m.Error = msg.err.Error()
+			} else {
+				m.Error = ""
+				m.SelectedFile = ""
+				m.SelectedPage = "FileList"
+			}
+			return m, nil
+
+		case uploadFinishedMsg:
+			m.Loading = false
+			if msg.err != nil {
+				m.Error = msg.err.Error()
+			} else {
+				m.Error = ""
+				m.SelectedPage = "FileList"
+				m.SelectedFile = ""
+			}
+			return m, nil
+
+		default:
+			return m, nil
+		}
+	}
+
 	if m.SelectedPage == "FileList" && m.HorCursor == 1 {
 		// 1) Сначала свои хоткеи
 		if km, ok := msg.(tea.KeyMsg); ok {
@@ -73,25 +248,6 @@ func (m TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.W, m.H = msg.Width, msg.Height
-	case uploadFinishedMsg:
-		m.Loading = false
-		if msg.err != nil {
-			m.Error = msg.err.Error()
-		} else {
-			m.Error = ""
-			m.SelectedFile = ""
-		}
-		return m, nil
-
-	// 3) тики спиннера: только когда Loading=true
-	case spinner.TickMsg:
-		if m.Loading {
-			var cmd tea.Cmd
-			m.Spin, cmd = m.Spin.Update(msg)
-			return m, cmd
-		}
-		return m, nil
-
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
@@ -142,32 +298,30 @@ func (m TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.HorCursor == 0 {
 			if msg.String() == "enter" {
 				if m.Profile.Auth {
+
+					if m.MainChoices[m.LeftCursor] == "Vault" {
+						m.SelectedFile = ""
+					}
 					if m.MainChoices[m.LeftCursor] == "Logout" {
-						_, err := akclient.Logout()
-						if err != nil {
-							m.Error = err.Error()
-							return m, tea.ClearScreen
-						}
-						helpers.SaveSession(&helpers.Session{
-							AccessToken: "",
-							ExpiresAt:   time.Now(),
-						})
-						m.LeftCursor = 0
-						m.Profile = &ProfileModel{}
-						m.login.Reset()
-						m.password.Reset()
-						m.Choices = m.LoginChoices
-						m.SelectedPage = "Register"
-						return m, tea.ClearScreen
+						m.Loading = true
+						return m, tea.Batch(
+							m.Spin.Tick,
+							func() tea.Msg {
+								_, err := akclient.Logout()
+								return logoutFinishedMsg{err: err}
+							},
+						)
+
 					}
 					if m.MainChoices[m.LeftCursor] == "FileList" {
-						list, err := akclient.GetFiles()
-						if err != nil {
-							m.Error = err.Error()
-							return m, tea.ClearScreen
-						}
-						m.Files = list
-						m.table.SetRows([]table.Row(helpers.FilesToRows(list)))
+						m.Loading = true
+						return m, tea.Batch(
+							m.Spin.Tick,
+							func() tea.Msg {
+								list, err := akclient.GetFiles()
+								return getListFinishedMsg{err: err, list: list}
+							},
+						)
 					}
 					m.SelectedPage = m.MainChoices[m.LeftCursor]
 				} else {

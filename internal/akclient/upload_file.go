@@ -14,29 +14,35 @@ import (
 
 	"github.com/rtmelsov/adv-keeper/internal/helpers"
 	"github.com/rtmelsov/adv-keeper/internal/middleware"
+	"github.com/rtmelsov/adv-keeper/internal/models"
 
 	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
 )
 
 const chunkSize = 1 << 20 // 1 MiB — безопасно ниже 4 MiB лимита на сообщение
 
-func UploadFile(path string) (*filev1.UploadResponse, error) {
+func UploadFile(path string, prog chan<- models.Prog) {
+	defer close(prog)
 	ctx, err := middleware.AddAuthData()
 	if err != nil {
-		return nil, err
+		prog <- models.Prog{Err: err}
+		return
 	}
 
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		prog <- models.Prog{Err: err}
+		return
 	}
 	defer f.Close()
 
 	stat, err := f.Stat()
 	if err != nil {
-		return nil, err
+		prog <- models.Prog{Err: err}
+		return
 	}
 
+	total := stat.Size()
 	conn, err := grpc.NewClient(
 		helpers.Addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -52,7 +58,8 @@ func UploadFile(path string) (*filev1.UploadResponse, error) {
 	)
 
 	if err != nil {
-		return nil, err
+		prog <- models.Prog{Err: err}
+		return
 	}
 	defer conn.Close()
 
@@ -60,7 +67,8 @@ func UploadFile(path string) (*filev1.UploadResponse, error) {
 
 	stream, err := client.Upload(ctx)
 	if err != nil {
-		return nil, err
+		prog <- models.Prog{Err: err}
+		return
 	}
 
 	// 1) отправляем мета-инфу (первое сообщение)
@@ -73,7 +81,8 @@ func UploadFile(path string) (*filev1.UploadResponse, error) {
 		},
 	})
 	if err != nil {
-		return nil, err
+		prog <- models.Prog{Err: err}
+		return
 	}
 
 	// 2) шлём файл кусками
@@ -89,25 +98,32 @@ func UploadFile(path string) (*filev1.UploadResponse, error) {
 			if err := stream.Send(&filev1.UploadRequest{
 				Payload: &filev1.UploadRequest_Chunk{Chunk: chunk},
 			}); err != nil {
-				return nil, fmt.Errorf("send chunk: %w", err)
+				prog <- models.Prog{Err: err}
+				return
 			}
 			offset += int64(n)
+			select {
+			case prog <- models.Prog{Done: offset, Total: total}:
+			default: // не блокируем UI, если буфер заполнен
+			}
 		}
 		if readErr == io.EOF {
 			break // <— обязательно выходим!
 		}
 		if readErr != nil {
-			return nil, fmt.Errorf("read file: %w", readErr)
+			prog <- models.Prog{Err: err}
+			return
 		}
 	}
 
 	// 3) закрываем отправку и получаем ответ
-	resp, err := stream.CloseAndRecv()
+	_, err = stream.CloseAndRecv()
 	if err != nil {
 		if st, ok := status.FromError(err); ok {
-			return nil, fmt.Errorf("upload failed: %s: %s", st.Code(), st.Message())
+			prog <- models.Prog{Err: fmt.Errorf("upload failed: %s: %s", st.Code(), st.Message())}
+			return
 		}
-		return nil, fmt.Errorf("upload failed: %w", err)
+		prog <- models.Prog{Err: fmt.Errorf("upload failed: %w", err)}
+		return
 	}
-	return resp, nil
 }

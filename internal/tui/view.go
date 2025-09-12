@@ -23,8 +23,13 @@ func (m TuiModel) View() string {
 	// --- Header/status (outside the box) ---
 	status := ""
 	if m.Loading {
-		status = ui.StatusBar.Render(m.Spin.View()+" Загрузка…") +
-			fmt.Sprintf(" chunk size: %v - %v", m.LoaderCount.FileSize, m.LoaderCount.ChankSize)
+		if m.Uploading || m.Downloading {
+			return m.loadingView()
+		} else {
+			status = ui.StatusBar.Render(m.Spin.View()+" Загрузка…") +
+				fmt.Sprintf(" chunk size: %v - %v", m.LoaderCount.FileSize, m.LoaderCount.ChankSize)
+		}
+
 	} else {
 		status = ui.StatusBar.Render("Готово")
 	}
@@ -78,7 +83,7 @@ func (m TuiModel) View() string {
 	}
 
 	rightStyle := ui.Content
-	if m.HorCursor == 0 {
+	if m.HorCursor == 0 || m.Loading {
 		rightStyle = ui.ContentDisabled
 	}
 

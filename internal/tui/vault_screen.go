@@ -5,13 +5,83 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	commonv1 "github.com/rtmelsov/adv-keeper/gen/go/proto/common/v1"
+	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
 	"github.com/rtmelsov/adv-keeper/internal/akclient"
+	"github.com/rtmelsov/adv-keeper/internal/models"
 	"github.com/rtmelsov/adv-keeper/internal/ui"
 
 	"os"
 )
 
+type OpKind string
+
+const (
+	OpUpload   OpKind = "upload"
+	OpDownload OpKind = "download"
+	// OpIndex, OpSync и т.д.
+)
+
+type logoutFinishedMsg struct{ err error }
+type loginFinishedMsg struct {
+	err  error
+	resp *commonv1.LoginResponse
+}
+type getListFinishedMsg struct {
+	err  error
+	list *filev1.GetFilesResponse
+}
+type deleteFileFinishedMsg struct{ err error }
+type downloadFileFinishedMsg struct{ err error }
+
+// сообщения
+type progressChanReadyMsg struct {
+	Kind OpKind
+	ID   string
+	ch   <-chan models.Prog
+}
+type progressMsg struct {
+	Kind  OpKind
+	ID    string
+	Done  int64
+	Total int64
+}
+
+type finishedMsg struct {
+	Kind OpKind
+	ID   string
+	Err  error
+}
 type uploadFinishedMsg struct{ err error }
+
+func listenNext(kind OpKind, id string, ch <-chan models.Prog) tea.Cmd {
+	return func() tea.Msg {
+		p, ok := <-ch
+		if !ok {
+			return finishedMsg{Kind: kind, ID: id, Err: nil}
+		}
+		if p.Err != nil {
+			return finishedMsg{Kind: kind, ID: id, Err: p.Err}
+		}
+		return progressMsg{Kind: kind, ID: id, Done: p.Done, Total: p.Total}
+	}
+}
+
+func startUploadCmd(id, path string) tea.Cmd {
+	return func() tea.Msg {
+		ch := make(chan models.Prog, 32)
+		go akclient.UploadFile(path, ch)
+		return progressChanReadyMsg{Kind: OpUpload, ID: id, ch: ch}
+	}
+}
+
+func startDownloadCmd(id, fileID, outPath string) tea.Cmd {
+	return func() tea.Msg {
+		ch := make(chan models.Prog, 32)
+		go akclient.DownloadFile(fileID, ch)
+		return progressChanReadyMsg{Kind: OpDownload, ID: id, ch: ch}
+	}
+}
 
 func (m TuiModel) VaultAction(msg string) (tea.Model, tea.Cmd) {
 	switch msg {
@@ -41,8 +111,9 @@ func (m TuiModel) VaultAction(msg string) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(
 				m.Spin.Tick,
 				func() tea.Msg {
-					_, err := akclient.UploadFile(m.SelectedFile)
-					return uploadFinishedMsg{err: err}
+					ch := make(chan models.Prog, 32)
+					go akclient.UploadFile(m.SelectedFile, ch)
+					return progressChanReadyMsg{ch: ch, Kind: OpUpload}
 				},
 			)
 		}
