@@ -9,6 +9,7 @@ import (
 	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
 	"github.com/rtmelsov/adv-keeper/internal/akclient"
 	"github.com/rtmelsov/adv-keeper/internal/models"
+	"time"
 )
 
 type ProfileModel struct {
@@ -17,6 +18,19 @@ type ProfileModel struct {
 }
 
 type TuiModel struct {
+	uploadCh    <-chan models.Prog
+	Uploaded    int64
+	UploadTotal int64
+	UploadStart time.Time
+	Uploading   bool
+
+	// download
+	downloadCh    <-chan models.Prog
+	Downloaded    int64
+	DownloadTotal int64
+	DownloadStart time.Time
+	Downloading   bool
+
 	LoaderCount      models.LoaderType
 	W                int
 	H                int

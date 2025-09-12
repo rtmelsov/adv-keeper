@@ -17,6 +17,7 @@ import (
 	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
 	"github.com/rtmelsov/adv-keeper/internal/helpers"
 	"github.com/rtmelsov/adv-keeper/internal/middleware"
+	"github.com/rtmelsov/adv-keeper/internal/models"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -43,15 +44,17 @@ func safeBase(name string) string {
 	}
 	return string(runes)
 }
-
-func DownloadFile(fileID string) (*filev1.GetFilesResponse, error) {
+func DownloadFile(fileID string, prog chan<- models.Prog) {
+	defer close(prog)
 	ctx, err := middleware.AddAuthData()
 	if err != nil {
-		return nil, err
+		prog <- models.Prog{Err: err}
+		return
 	}
 	outDir := helpers.DownloadFilesDir
 	conn, err := grpc.NewClient(helpers.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
+		prog <- models.Prog{Err: err}
 		log.Fatalf("dial %s: %v", helpers.Addr, err)
 	}
 	defer conn.Close()
@@ -61,17 +64,20 @@ func DownloadFile(fileID string) (*filev1.GetFilesResponse, error) {
 
 	stream, err := c.DownloadFile(ctx, &filev1.DownloadFileRequest{Fileid: fileID})
 	if err != nil {
-		return nil, err
+		prog <- models.Prog{Err: err}
+		return
 	}
 
 	// 1) ждём FileInfo
 	first, err := stream.Recv()
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "read: %v", err)
+		prog <- models.Prog{Err: status.Errorf(codes.Internal, "read: %v", err)}
+		return
 	}
 	info := first.GetInfo()
 	if info == nil {
-		return nil, errors.New("first message must be FileInfo")
+		prog <- models.Prog{Err: errors.New("first message must be FileInfo")}
+		return
 	}
 
 	filename := safeBase(info.GetFilename())
@@ -81,14 +87,16 @@ func DownloadFile(fileID string) (*filev1.GetFilesResponse, error) {
 
 	// 2) готовим пути/директории
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return nil, fmt.Errorf("mkdir: %w", err)
+		prog <- models.Prog{Err: fmt.Errorf("mkdir: %w", err)}
+		return
 	}
 	tmpPath := filepath.Join(outDir, filename+".part")
 	finalPath := filepath.Join(outDir, filename)
 
 	out, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
-		return nil, fmt.Errorf("create: %w", err)
+		prog <- models.Prog{Err: fmt.Errorf("create: %w", err)}
+		return
 	}
 	defer func() {
 		out.Close()
@@ -97,12 +105,20 @@ func DownloadFile(fileID string) (*filev1.GetFilesResponse, error) {
 		}
 	}()
 
+	stat, err := out.Stat()
+	if err != nil {
+		prog <- models.Prog{Err: err}
+		return
+	}
+	total := stat.Size()
+
 	h := sha256.New()
 	var written int64
 
 	for {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			prog <- models.Prog{Err: ctx.Err()}
+			return
 		}
 		msg, rerr := stream.Recv()
 		if rerr == io.EOF {
@@ -111,39 +127,49 @@ func DownloadFile(fileID string) (*filev1.GetFilesResponse, error) {
 		if rerr != nil {
 			// красиво покажем gRPC статус
 			if st, ok := status.FromError(rerr); ok {
-				return nil, fmt.Errorf("recv: %s", st.Message())
+				prog <- models.Prog{Err: fmt.Errorf("recv: %s", st.Message())}
+				return
 			}
-			return nil, fmt.Errorf("recv: %w", rerr)
+			prog <- models.Prog{Err: fmt.Errorf("recv: %w", rerr)}
+			return
 		}
 
 		ch := msg.GetChunk()
 		if ch == nil {
-			return nil, errors.New("unexpected message: want FileChunk")
+			prog <- models.Prog{Err: errors.New("unexpected message: want FileChunk")}
+			return
 		}
 
 		n, werr := out.Write(ch.Content)
 		if werr != nil {
-			return nil, fmt.Errorf("write: %w", werr)
+			prog <- models.Prog{Err: fmt.Errorf("write: %w", werr)}
+			return
 		}
 		written += int64(n)
+		select {
+		case prog <- models.Prog{Done: written, Total: total}:
+		default: // не блокируем UI, если буфер заполнен
+		}
 		_, _ = h.Write(ch.Content)
 	}
 
 	// 4) fsync → close → rename
 	if err := out.Sync(); err != nil {
-		return nil, fmt.Errorf("sync: %w", err)
+		prog <- models.Prog{Err: fmt.Errorf("sync: %w", err)}
+		return
 	}
 	if err := out.Close(); err != nil {
-		return nil, fmt.Errorf("close: %w", err)
+		prog <- models.Prog{Err: fmt.Errorf("close: %w", err)}
+		return
 	}
 	if err := os.Rename(tmpPath, finalPath); err != nil {
-		return nil, fmt.Errorf("rename: %w", err)
+		prog <- models.Prog{Err: fmt.Errorf("rename: %w", err)}
+		return
 	}
 
 	// 5) сверим размер (если сервер прислал size)
 	if info.Size > 0 && written != info.Size {
-		return nil, fmt.Errorf("size mismatch: got %d, want %d", written, info.Size)
+		prog <- models.Prog{Err: fmt.Errorf("size mismatch: got %d, want %d", written, info.Size)}
+		return
 	}
-
-	return nil, nil
 }
