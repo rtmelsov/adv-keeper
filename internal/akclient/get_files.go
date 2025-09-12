@@ -17,19 +17,15 @@ func GetFiles() (*filev1.GetFilesResponse, error) {
 	GetFilesRequest := &filev1.GetFilesRequest{
 		Limit: 50,
 	}
-	envs, err := helpers.LoadConfig()
-	if err != nil {
-		return nil, err
-	}
 
 	ctxWithMeta, err := middleware.AddAuthData()
 	if err != nil {
 		return nil, err
 	}
 
-	conn, err := grpc.NewClient(envs.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(helpers.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("dial %s: %v", envs.Addr, err)
+		log.Fatalf("dial %s: %v", helpers.Addr, err)
 	}
 	defer conn.Close()
 

@@ -2,7 +2,6 @@
 package akclient
 
 import (
-	"errors"
 	"log"
 
 	"github.com/rtmelsov/adv-keeper/internal/helpers"
@@ -15,18 +14,13 @@ import (
 )
 
 func GetProfile() (*commonv1.GetProfileResponse, error) {
-	envs, err := helpers.LoadConfig()
-	if err != nil {
-		return nil, errors.New("не получилось распарсить переменные окуржения")
-	}
-
 	ctx, err := middleware.AddAuthData()
 	if err != nil {
 		return nil, err
 	}
-	conn, err := grpc.NewClient(envs.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(helpers.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("dial %s: %v", envs.Addr, err)
+		log.Fatalf("dial %s: %v", helpers.Addr, err)
 	}
 	defer conn.Close()
 

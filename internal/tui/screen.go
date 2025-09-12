@@ -4,7 +4,6 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/log"
 
 	"path/filepath"
 	"time"
@@ -163,7 +162,6 @@ func (m TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					if m.MainChoices[m.LeftCursor] == "FileList" {
 						list, err := akclient.GetFiles()
-						log.Info(list)
 						if err != nil {
 							m.Error = err.Error()
 							return m, tea.ClearScreen

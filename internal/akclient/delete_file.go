@@ -19,10 +19,6 @@ func DeleteFile(fileID string) error {
 	if fileID == "" {
 		return fmt.Errorf("empty fileID")
 	}
-	envs, err := helpers.LoadConfig()
-	if err != nil {
-		return err
-	}
 
 	// ctx с Authorization: Bearer <token>
 	ctx, err := middleware.AddAuthData()
@@ -30,9 +26,9 @@ func DeleteFile(fileID string) error {
 		return err
 	}
 
-	conn, err := grpc.NewClient(envs.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(helpers.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		return fmt.Errorf("dial %s: %w", envs.Addr, err)
+		return fmt.Errorf("dial %s: %w", helpers.Addr, err)
 	}
 	defer conn.Close()
 
