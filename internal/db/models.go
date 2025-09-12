@@ -10,17 +10,11 @@ import (
 	"github.com/google/uuid"
 )
 
-type Device struct {
-	ID        uuid.UUID
-	UserID    uuid.UUID
-	DeviceID  string
-	CreatedAt time.Time
-}
-
 type File struct {
 	ID        uuid.UUID
 	UserID    uuid.UUID
-	Name      string
+	Filename  string
+	SizeBytes int64
 	Path      string
 	CreatedAt time.Time
 }

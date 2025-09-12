@@ -3,16 +3,17 @@ package common.v1;
 option go_package = "github.com/rtmelsov/adv-keeper/gen/go/common/v1;commonv1";
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
 
 service AuthService {
-  rpc Logout(TokenPair) returns (TokenPair);
+  rpc Logout(google.protobuf.Empty) returns (TokenPair);
+  rpc GetProfile(google.protobuf.Empty) returns (GetProfileResponse);
   rpc Register(RegisterRequest) returns (RegisterResponse);
   rpc Login(LoginRequest) returns (LoginResponse);
 }
 
 message TokenPair {
   string access_token = 1;   // JWT (HS256)
-  //google.protobuf.Timestamp
   google.protobuf.Timestamp expires_at = 3;     // RFC3339 серверное время истечения refresh
 }
 
@@ -21,9 +22,13 @@ message LoginRequest {
   string password = 2;
 }
 
+message GetProfileResponse {
+  string user_id   = 1;
+  string email     = 3;
+}
+
 message LoginResponse {
   string user_id   = 1;
-  string device_id = 2;
   string email     = 3;
   TokenPair tokens = 4; // ← добавили
 }
@@ -35,7 +40,6 @@ message RegisterRequest {
 
 message RegisterResponse {
   string user_id   = 1;
-  string device_id = 2; // вернём то, что прислал клиент
   string email    = 3;
   TokenPair tokens = 4; // ← добавили
 }

@@ -21,3 +21,4 @@ db/migrations/*.sql-journal
 /.vscode/
 .DS_Store
 /var/
+opt/
