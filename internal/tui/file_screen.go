@@ -6,8 +6,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	// commonv1 "github.com/rtmelsov/adv-keeper/gen/go/proto/common/v1"
-	// "github.com/rtmelsov/adv-keeper/internal/helpers"
 	"github.com/rtmelsov/adv-keeper/internal/akclient"
+	"github.com/rtmelsov/adv-keeper/internal/models"
 	"github.com/rtmelsov/adv-keeper/internal/ui"
 )
 
@@ -50,16 +50,25 @@ func (m TuiModel) FileDetailsAction(msg string) (tea.Model, tea.Cmd) {
 		return m, tea.ClearScreen
 	case "enter":
 		if m.RightCursor == 0 {
-			_, err := akclient.DownloadFile(m.SelectedFileInfo.Fileid)
-			if err != nil {
-				m.Error = err.Error()
-			}
+			m.Loading = true
+			return m, tea.Batch(
+				m.Spin.Tick,
+				func() tea.Msg {
+					ch := make(chan models.Prog)
+					go akclient.DownloadFile(m.SelectedFileInfo.Fileid, ch)
+					return progressChanReadyMsg{ch: ch, Kind: OpDownload}
+				},
+			)
 		}
 		if m.RightCursor == 1 {
-			err := akclient.DeleteFile(m.SelectedFileInfo.Fileid)
-			if err != nil {
-				m.Error = err.Error()
-			}
+			m.Loading = true
+			return m, tea.Batch(
+				m.Spin.Tick,
+				func() tea.Msg {
+					err := akclient.DeleteFile(m.SelectedFileInfo.Fileid)
+					return deleteFileFinishedMsg{err: err}
+				},
+			)
 		}
 		return m, tea.ClearScreen
 
