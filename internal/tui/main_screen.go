@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -12,9 +11,7 @@ import (
 )
 
 func (m TuiModel) Main() string {
-	title := ui.Title.Render(fmt.Sprintf("Hello: %s", m.Profile.Email))
 	var s string
-	s += title + "\n\n"
 
 	btn := lipgloss.JoinVertical(
 		lipgloss.Top,

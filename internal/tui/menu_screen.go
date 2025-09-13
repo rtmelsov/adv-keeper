@@ -1,30 +1,90 @@
 package tui
 
 import (
-	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/rtmelsov/adv-keeper/internal/ui"
 )
 
-func (m TuiModel) Menu() string {
-	title := ui.Title.Render("todo: надо добавить инфо клиента")
+var MenuList = map[string]string{
+	"Vault":    "Новый файл",
+	"Main":     "Основное",
+	"FileList": "Список файлов",
+	"Logout":   "Выйти",
+	"Login":    "Войти",
+	"Register": "Регистрация",
+}
 
+var (
+	stWelcomeTitle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#E5E7EB"))
+	stWelcomeSub   = lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("#9CA3AF"))
+	stAvatar       = lipgloss.NewStyle().Width(3).Align(lipgloss.Center).Bold(true).
+			Foreground(lipgloss.Color("#063E3B")).Background(lipgloss.Color("#34D399")).MarginRight(1)
+	stSep = lipgloss.NewStyle().Foreground(lipgloss.Color("#374151"))
+)
+
+func firstInitial(name string) string {
+	if name == "" {
+		return "?"
+	}
+	r, _ := utf8.DecodeRuneInString(name)
+	return strings.ToUpper(string(r))
+}
+
+func (m TuiModel) Menu(innerW int) string {
+	if innerW < 10 {
+		innerW = 10
+	}
+
+	// --- Header: аватар + «Добро пожаловать»
+	name := "гость"
+	if m.Profile.Auth && m.Profile.Email != "" {
+		name = m.Profile.Email
+	}
+	header := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		stAvatar.Render(firstInitial(name)),
+		lipgloss.JoinVertical(lipgloss.Left,
+			stWelcomeSub.Render("Добро пожаловать,"),
+			stWelcomeTitle.Render(name),
+		),
+	)
+
+	// --- Точная линия по ширине сайдбара
+	hr := stSep.Width(innerW).Render(strings.Repeat("─", innerW))
+
+	// --- Пункты меню: зелёная заливка на всю ширину, БЕЗ рамки
+	var choices []string
 	if m.Profile.Auth {
-		m.Choices = m.MainChoices
+		choices = m.MainChoices
 	} else {
-		m.Choices = m.LoginChoices
+		choices = m.LoginChoices
 	}
 
-	items := make([]string, 0, len(m.Choices))
-	for i, choice := range m.Choices {
-		item := ui.NavInactive.Render(fmt.Sprintf("[%s]", choice))
-		if m.LeftCursor == i && m.HorCursor == 0 {
-			item = ui.NavActive.Render(fmt.Sprintf("[%s]", choice))
+	rowBase := lipgloss.NewStyle().Width(innerW).Align(lipgloss.Left)
+	rowInactive := rowBase.PaddingLeft(1).Foreground(lipgloss.Color("#9CA3AF"))
+	rowActive := rowBase.PaddingLeft(1).Bold(true).
+		Foreground(lipgloss.Color("#0B1021")).Background(lipgloss.Color("#A7F3D0")) // полный зелёный фон
+
+	items := make([]string, 0, len(choices))
+	for i, choice := range choices {
+		active := m.LeftCursor == i && m.HorCursor == 0
+		label := "› " + MenuList[choice]
+		if active {
+			items = append(items, rowActive.Render(label))
+		} else {
+			items = append(items, rowInactive.Render(label))
 		}
-		items = append(items, item)
 	}
+	list := lipgloss.JoinVertical(lipgloss.Left, items...)
 
-	list := lipgloss.JoinVertical(lipgloss.Top, items...)
-	return lipgloss.JoinVertical(lipgloss.Left, title, "", list)
+	// --- Сборка
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		header, // вернули хедер
+		hr,     // линия ровно innerW
+		"",
+		list, // пункты
+	)
 }

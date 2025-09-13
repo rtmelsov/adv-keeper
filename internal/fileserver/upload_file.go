@@ -2,9 +2,6 @@
 package fileserver
 
 import (
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -20,7 +17,13 @@ import (
 	filev1 "github.com/rtmelsov/adv-keeper/gen/go/proto/file/v1"
 )
 
+func CancelUpload(path string) {
+
+	os.Remove(path)
+}
+
 func (s *Service) Upload(stream filev1.FileService_UploadServer) error {
+
 	log.Info("try to get client id")
 
 	ctx := stream.Context()
@@ -37,7 +40,6 @@ func (s *Service) Upload(stream filev1.FileService_UploadServer) error {
 		hasher    = sha256.New()
 		startTime = time.Now()
 	)
-
 	// 1) ждём первое сообщение с метаданными
 	first, err := stream.Recv()
 	if err != nil {
@@ -50,9 +52,20 @@ func (s *Service) Upload(stream filev1.FileService_UploadServer) error {
 		return fmt.Errorf("first message must be FileInfo")
 	}
 
+	addFileParams, err := s.Q.AddFile(ctx, db.AddFileParams{
+		UserID:    uid,
+		Filename:  filename,
+		Path:      filepath.Base(info.Filename),
+		SizeBytes: info.GetSize(),
+	})
+	if err != nil {
+		return fmt.Errorf("first message must be FileInfo")
+	}
+
 	log.Info("first get info...")
 
-	filename = filepath.Base(info.Filename)
+	filename = addFileParams.ID.String()
+
 	if filename == "" {
 		filename = fmt.Sprintf("upload-%d.bin", time.Now().UnixNano())
 	}
@@ -62,13 +75,15 @@ func (s *Service) Upload(stream filev1.FileService_UploadServer) error {
 	tmpPath := filepath.Join(s.UploadDir, filename+".part")
 	finalPath := filepath.Join(s.UploadDir, filename)
 
-	log.Info("start: mkdir...", "file name", filename)
-
 	log.Info("mkdir all uplaod dir...", "path", s.UploadDir)
 	outFile, err = os.Create(tmpPath)
 	if err != nil {
-
 		log.Error("OS CREATE", "error: ", err.Error())
+		_ = os.Remove(finalPath)
+		_, _ = s.Q.DeleteFile(ctx, db.DeleteFileParams{
+			UserID: uid,
+			ID:     addFileParams.ID,
+		})
 		return err
 	}
 
@@ -88,14 +103,16 @@ func (s *Service) Upload(stream filev1.FileService_UploadServer) error {
 		// Проверим отмену клиента/дедлайн
 		if err := ctx.Err(); err != nil {
 			log.Error("Context", "Error", err.Error())
+			_ = os.Remove(finalPath)
+			_, _ = s.Q.DeleteFile(ctx, db.DeleteFileParams{
+				UserID: uid,
+				ID:     addFileParams.ID,
+			})
 			return err
 		}
 
 		log.Info("1")
-
 		msg, err := stream.Recv()
-
-		log.Info("1.2")
 		if err == io.EOF {
 			log.Error("io.EOF: stream Recv", "Error", err.Error())
 			break
@@ -104,6 +121,11 @@ func (s *Service) Upload(stream filev1.FileService_UploadServer) error {
 		log.Info("1.5")
 		if err != nil {
 			log.Error("stream Recv", "Error", err.Error())
+			_ = os.Remove(finalPath)
+			_, _ = s.Q.DeleteFile(ctx, db.DeleteFileParams{
+				UserID: uid,
+				ID:     addFileParams.ID,
+			})
 			return err
 		}
 
@@ -111,12 +133,22 @@ func (s *Service) Upload(stream filev1.FileService_UploadServer) error {
 		ch := msg.GetChunk()
 		if ch == nil {
 			log.Error("unexpected message type: want FileChunk")
+			_ = os.Remove(finalPath)
+			_, _ = s.Q.DeleteFile(ctx, db.DeleteFileParams{
+				UserID: uid,
+				ID:     addFileParams.ID,
+			})
 			return fmt.Errorf("unexpected message type: want FileChunk")
 		}
 
 		n, err := outFile.Write(ch.Content)
 		if err != nil {
 			log.Error("outFile.Write", "Error", err.Error())
+			_ = os.Remove(finalPath)
+			_, _ = s.Q.DeleteFile(ctx, db.DeleteFileParams{
+				UserID: uid,
+				ID:     addFileParams.ID,
+			})
 			return err
 		}
 
@@ -129,11 +161,21 @@ func (s *Service) Upload(stream filev1.FileService_UploadServer) error {
 	log.Info("end: getting info...")
 	// 3) закрываем и переименовываем atomic-стилем
 	if err := outFile.Sync(); err != nil {
+		_ = os.Remove(finalPath)
+		_, _ = s.Q.DeleteFile(ctx, db.DeleteFileParams{
+			UserID: uid,
+			ID:     addFileParams.ID,
+		})
 		return err
 	}
 
 	log.Info("out file close...")
 	if err := os.Rename(tmpPath, finalPath); err != nil {
+		_ = os.Remove(finalPath)
+		_, _ = s.Q.DeleteFile(ctx, db.DeleteFileParams{
+			UserID: uid,
+			ID:     addFileParams.ID,
+		})
 		return err
 	}
 	log.Info("os rename...")
@@ -141,18 +183,6 @@ func (s *Service) Upload(stream filev1.FileService_UploadServer) error {
 	sum := hex.EncodeToString(hasher.Sum(nil))
 	log.Info("Upload done: %s, bytes=%d, sha256=%s, took=%s",
 		finalPath, written, sum, time.Since(startTime))
-
-	_, err = s.Q.AddFile(ctx, db.AddFileParams{
-		UserID:    uid,
-		Filename:  filename,
-		Path:      finalPath,
-		SizeBytes: info.GetSize(),
-	})
-	if err != nil {
-		_ = os.Remove(finalPath) // best effort
-
-		return status.Errorf(codes.Internal, "db insert failed: %v", err)
-	}
 
 	return stream.SendAndClose(&filev1.UploadResponse{
 		StoredAs:      finalPath,

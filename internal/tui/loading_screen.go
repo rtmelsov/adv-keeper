@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/rtmelsov/adv-keeper/internal/ui"
 	"math"
 	"strings"
 	"time"
@@ -35,8 +37,12 @@ func humanizeDuration(d time.Duration) string {
 	return fmt.Sprintf("%d:%02d", m, s)
 }
 
-// Универсальный рендерер прогресса
-func (m TuiModel) renderProgress(title string, done, total int64, startedAt time.Time, errStr string) string {
+func (m TuiModel) renderProgressStyled(title string, done, total int64, startedAt time.Time, errStr string, maxWidth int) string {
+	if maxWidth < 24 {
+		maxWidth = 24
+	} // safety
+
+	// percent
 	var pct float64
 	if total > 0 {
 		pct = float64(done) / float64(total)
@@ -45,15 +51,20 @@ func (m TuiModel) renderProgress(title string, done, total int64, startedAt time
 		}
 	}
 
-	// Прогресс-бар
-	const barW = 40
+	// bar width derived from maxWidth (leave room for " 100%")
+	barW := max(10, min(60, maxWidth-12))
 	filled := int(math.Round(pct * float64(barW)))
 	if filled > barW {
 		filled = barW
 	}
-	bar := "[" + strings.Repeat("█", filled) + strings.Repeat("░", barW-filled) + "]"
 
-	// Скорость и ETA
+	// colored bar
+	bar := "[" +
+		ui.StBarFill.Render(strings.Repeat("█", filled)) +
+		ui.StBarEmpty.Render(strings.Repeat("░", barW-filled)) +
+		"]"
+
+	// speed/eta
 	elapsed := time.Since(startedAt)
 	var bps float64
 	if elapsed > 0 {
@@ -61,63 +72,73 @@ func (m TuiModel) renderProgress(title string, done, total int64, startedAt time
 	}
 	var eta time.Duration
 	if bps > 0 && total > 0 {
-		remaining := float64(total - done)
-		eta = time.Duration(remaining/bps) * time.Second
+		eta = time.Duration((float64(total-done) / bps)) * time.Second
 	}
 
-	line1 := fmt.Sprintf("%s %3.0f%%", bar, pct*100)
-	line2 := fmt.Sprintf("%s / %s",
-		humanizeBytes(done),
-		func() string {
+	// lines (styled)
+	lineTitle := ui.StTitle.Render(ui.StValue.Render(m.Spin.View()) + " " + title)
+	line1 := fmt.Sprintf("%s %s", bar, ui.StValue.Render(fmt.Sprintf("%3.0f%%", pct*100)))
+	line2 := fmt.Sprintf("%s %s %s %s",
+		ui.StLabel.Render("Done:"),
+		ui.StValue.Render(humanizeBytes(done)),
+		ui.StLabel.Render(" / Total:"),
+		ui.StValue.Render(func() string {
 			if total > 0 {
 				return humanizeBytes(total)
 			}
 			return "??"
-		}(),
+		}()),
 	)
-	line3 := fmt.Sprintf("Скорость: %s/s   ETA: %s",
-		func() string {
+	line3 := fmt.Sprintf("%s %s   %s %s",
+		ui.StLabel.Render("Speed:"),
+		ui.StValue.Render(func() string {
 			if bps > 0 {
-				return humanizeBytes(int64(bps))
+				return humanizeBytes(int64(bps)) + "/s"
 			}
 			return "—"
-		}(),
-		func() string {
+		}()),
+		ui.StLabel.Render("ETA:"),
+		ui.StValue.Render(func() string {
 			if eta > 0 {
 				return humanizeDuration(eta)
 			}
 			return "—"
-		}(),
+		}()),
 	)
 
 	errLine := ""
 	if errStr != "" {
-		errLine = "\nОшибка: " + errStr
+		errLine = "\n" + ui.StErr.Render("Ошибка: "+errStr)
 	}
 
-	return fmt.Sprintf("%s %s\n\n%s\n%s\n%s%s\n",
-		m.Spin.View(), title, line1, line2, line3, errLine)
+	return lipgloss.NewStyle().
+		MaxWidth(maxWidth).
+		Render(lineTitle + "\n\n" + line1 + "\n" + line2 + "\n" + line3 + errLine)
 }
 
-// Отдельные вьюхи
-func (m TuiModel) uploadLoadingView() string {
-	return m.renderProgress("Отправка файла… (ESC — отмена)", m.Uploaded, m.UploadTotal, m.UploadStart, m.Error)
-}
-
-func (m TuiModel) downloadLoadingView() string {
-	return m.renderProgress("Скачивание файла… (ESC — отмена)", m.Downloaded, m.DownloadTotal, m.DownloadStart, m.Error)
-}
-
-// Общий вход в загрузочный экран
-func (m TuiModel) loadingView() string {
+// your loader page uses the styled renderer
+func (m TuiModel) loadingViewStyled(maxWidth int) string {
 	switch {
 	case m.Uploading && m.Downloading:
-		return m.uploadLoadingView() + "\n" + m.downloadLoadingView()
+		return "ERROR: UPLOADING AND DOWNLOADING IN SAME TIME"
 	case m.Uploading:
-		return m.uploadLoadingView()
+		return m.renderProgressStyled("Отправка файла… (ESC — отмена)", m.Uploaded, m.UploadTotal, m.UploadStart, m.Error, maxWidth)
 	case m.Downloading:
-		return m.downloadLoadingView()
+		return m.renderProgressStyled("Скачивание файла… (ESC — отмена)", m.Downloaded, m.DownloadTotal, m.DownloadStart, m.Error, maxWidth)
 	default:
-		return "" // или основной View()
+		return "EMPTY SREAMING LOADING"
 	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

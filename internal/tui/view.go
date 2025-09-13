@@ -14,6 +14,23 @@ var (
 	SidebarW = 24
 )
 
+func (m TuiModel) LoadingFullScreen() string {
+	// build the colored loader content (see next section)
+	content := m.loadingViewStyled(min(m.W-8, 72)) // clamp width so it looks neat
+
+	panel := ui.StPanel.
+		Width(min(m.W-6, 76)). // panel width
+		MaxWidth(m.W - 6).
+		Render(content)
+
+	// center panel within the whole terminal
+	return lipgloss.Place(
+		m.W, m.H,
+		lipgloss.Center, lipgloss.Center,
+		panel,
+	)
+}
+
 func (m TuiModel) View() string {
 	// Wait for a size before we try to center things
 	if m.W == 0 || m.H == 0 {
@@ -24,7 +41,7 @@ func (m TuiModel) View() string {
 	status := ""
 	if m.Loading {
 		if m.StreamLoading {
-			return m.loadingView()
+			return m.LoadingFullScreen()
 		} else {
 			status = ui.StatusBar.Render(m.Spin.View()+" Загрузка…") +
 				fmt.Sprintf(" chunk size: %v - %v", m.LoaderCount.FileSize, m.LoaderCount.ChankSize)
@@ -72,27 +89,34 @@ func (m TuiModel) View() string {
 		boxH = availH
 	}
 
-	// --- left/right widths ---
-	leftW := SidebarW
-	if leftW > boxW-10 { // keep content usable on small screens
-		leftW = boxW / 3
-	}
-	rightW := boxW - leftW - 1 // -1 accounts for AppBox padding/borders visually; tweak if needed
-	if rightW < 10 {
-		rightW = 10
-	}
-
 	rightStyle := ui.Content
 	if m.HorCursor == 0 || m.Loading {
 		rightStyle = ui.ContentDisabled
 	}
 
+	// --- left/right widths ---
+	leftW := SidebarW
+	if leftW > boxW-10 {
+		leftW = boxW / 3
+	}
+	rightW := boxW - leftW - 1
+
+	frameW, _ := ui.Sidebar.GetFrameSize() // бордеры+паддинги
+	innerLeftW := leftW - frameW
+	if innerLeftW < 1 {
+		innerLeftW = 1
+	}
+
+	frameRightW, _ := rightStyle.GetFrameSize() // бордеры/паддинги правой колонки
+	innerRightW := rightW - frameRightW
+	if innerRightW < 1 {
+		innerRightW = 1
+	}
 	// --- left menu & right content ---
 	left := ui.Sidebar.
 		Width(leftW).
-		Height(boxH - 2). // compensate AppBox padding; remove if you prefer natural height
-		Render(m.Menu())
-
+		Height(boxH - 2).
+		Render(m.Menu(innerLeftW)) // <── передаём inner width
 	rightContent := m.RightPane(inner) // table OR upload (see below)
 	right := rightStyle.
 		Width(rightW).

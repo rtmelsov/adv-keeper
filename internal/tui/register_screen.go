@@ -11,7 +11,7 @@ import (
 
 func (m TuiModel) Register() string {
 	var s string
-	s += ui.Title.Render("Login screen") + "\n\n"
+	s += ui.Title.Render("Для регистрации введите данные") + "\n\n"
 
 	// Login label
 	loginLabel := ui.FieldLabel.Render("Логин:")
