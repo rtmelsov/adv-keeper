@@ -5,11 +5,11 @@ import (
 
 	"github.com/caarlos0/env/v6"
 	"github.com/joho/godotenv"
+	"github.com/rtmelsov/adv-keeper/internal/platformdirs"
 )
 
 var (
-	Addr             = "89.207.255.214:8080"
-	DownloadFilesDir = "."
+	Addr = "89.207.255.214:8080"
 )
 
 type Config struct {
@@ -36,5 +36,6 @@ func LoadConfig() (*Config, error) {
 	return &cfg, loadErr
 }
 
-// (опционально, только для тестов)
-// func resetConfigForTests() { loadOnce = sync.Once{}; cfg = Config{} }
+func GetDownloadsDir() (string, error) {
+	return platformdirs.DownloadsDir()
+}

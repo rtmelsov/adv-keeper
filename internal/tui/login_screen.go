@@ -10,26 +10,26 @@ import (
 
 func (m TuiModel) Login() string {
 	var s string
-	s += ui.Title.Render("Login screen") + "\n\n"
+	s += ui.Title.Render("Для входа введите данные") + "\n\n"
 
 	// Login label
-	loginLabel := ui.FieldLabel.Render("Login:")
+	loginLabel := ui.FieldLabel.Render("Логин:")
 	if m.RightCursor == 0 {
-		loginLabel = ui.FieldLabelActive.Render("Login:")
+		loginLabel = ui.FieldLabelActive.Render("Логин:")
 	}
 	s += loginLabel + " " + m.login.View() + "\n"
 
 	// Password label
-	passLabel := ui.FieldLabel.Render("Password:")
+	passLabel := ui.FieldLabel.Render("Пароль:")
 	if m.RightCursor == 1 {
-		passLabel = ui.FieldLabelActive.Render("Password:")
+		passLabel = ui.FieldLabelActive.Render("Пароль:")
 	}
 	s += passLabel + " " + m.password.View() + "\n\n"
 
 	// Button
-	btn := ui.ButtonInactive.Render("Login")
+	btn := ui.ButtonInactive.Render("Войти")
 	if m.RightCursor == 2 {
-		btn = ui.ButtonActive.Render("Login")
+		btn = ui.ButtonActive.Render("Войти")
 	}
 	s += btn + "\n"
 	return s

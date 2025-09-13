@@ -1,4 +1,3 @@
-
 syntax = "proto3";
 
 package file.v1;
@@ -55,11 +54,15 @@ message UploadResponse {
   string sha256         = 3; // контрольная сумма принятого
 }
 
+message FileEof {
+  string sha256_hex = 1;
+}
 
 message DownloadFileResponse {
   oneof payload {
     FileInfo info = 1;   // ПЕРВОЕ сообщение — мета-инфа
     FileChunk chunk = 2; // Далее — куски файла
+    FileEof eof = 3;
   }
 }
 

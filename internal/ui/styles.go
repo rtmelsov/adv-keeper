@@ -92,7 +92,20 @@ var (
 	MetaStyle = lipgloss.NewStyle().Faint(true)
 )
 
-// Контент справа (disabled)
-var ContentDisabled = Content.Copy().
+var ContentDisabled = Content.
 	Foreground(colMuted).
 	Faint(true)
+var (
+	StPanel = lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		Padding(1, 2).
+		BorderForeground(lipgloss.Color("#34D399")) // mint border
+
+	StTitle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#E5E7EB"))
+	StLabel = lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("#9AA0A6"))
+	StValue = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7DD3FC")) // cyan
+	StErr   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F87171")) // red
+
+	StBarFill  = lipgloss.NewStyle().Foreground(lipgloss.Color("#22C55E")) // green
+	StBarEmpty = lipgloss.NewStyle().Foreground(lipgloss.Color("#374151")) // gray
+)

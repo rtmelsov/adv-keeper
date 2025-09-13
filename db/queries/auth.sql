@@ -33,3 +33,4 @@ WHERE id = $1;
 SELECT id, user_id, filename, path, size_bytes, created_at
 FROM files
 WHERE id = $1 AND user_id = $2;
+
