@@ -2,11 +2,12 @@ package akclient
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"google.golang.org/grpc"
 
@@ -22,53 +23,35 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func safeBase(name string) string {
-	// убираем директории и опасные символы
-	base := filepath.Base(name)
-	runes := make([]rune, 0, len(base))
-	for _, r := range base {
-		switch {
-		case r >= 'a' && r <= 'z',
-			r >= 'A' && r <= 'Z',
-			r >= '0' && r <= '9',
-			r == '.', r == '-', r == '_', r == ' ':
-			runes = append(runes, r)
-		}
-	}
-	if len(runes) == 0 {
-		return "file"
-	}
-	// защитим длину
-	if len(runes) > 128 {
-		runes = runes[:128]
-	}
-	return string(runes)
-}
 func DownloadFile(fileID string, prog chan<- models.Prog) {
 	defer close(prog)
+
 	ctx, err := middleware.AddAuthData()
 	if err != nil {
 		prog <- models.Prog{Err: err}
 		return
 	}
-	outDir := helpers.DownloadFilesDir
-	conn, err := grpc.NewClient(helpers.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+
+	outDir, err := helpers.GetDownloadsDir()
 	if err != nil {
 		prog <- models.Prog{Err: err}
-		log.Fatalf("dial %s: %v", helpers.Addr, err)
+		return
+	}
+
+	conn, err := grpc.DialContext(ctx, helpers.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		prog <- models.Prog{Err: err}
+		return
 	}
 	defer conn.Close()
 
-	// 2) gRPC-клиент
 	c := filev1.NewFileServiceClient(conn)
-
 	stream, err := c.DownloadFile(ctx, &filev1.DownloadFileRequest{Fileid: fileID})
 	if err != nil {
 		prog <- models.Prog{Err: err}
 		return
 	}
 
-	// 1) ждём FileInfo
 	first, err := stream.Recv()
 	if err != nil {
 		prog <- models.Prog{Err: status.Errorf(codes.Internal, "read: %v", err)}
@@ -80,12 +63,9 @@ func DownloadFile(fileID string, prog chan<- models.Prog) {
 		return
 	}
 
-	filename := safeBase(info.GetFilename())
-	if filename == "" {
-		filename = "file"
-	}
+	filename := helpers.NextAvailableName(outDir, info.GetFilename())
+	total := info.GetSize()
 
-	// 2) готовим пути/директории
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		prog <- models.Prog{Err: fmt.Errorf("mkdir: %w", err)}
 		return
@@ -98,78 +78,95 @@ func DownloadFile(fileID string, prog chan<- models.Prog) {
 		prog <- models.Prog{Err: fmt.Errorf("create: %w", err)}
 		return
 	}
+	var retErr error
 	defer func() {
-		out.Close()
-		if err != nil {
-			_ = os.Remove(tmpPath)
+		_ = out.Close()
+		if retErr != nil {
+			_ = os.Remove(tmpPath) // удаляем именно .part при ошибке
 		}
 	}()
 
-	stat, err := out.Stat()
-	if err != nil {
-		prog <- models.Prog{Err: err}
-		return
-	}
-	total := stat.Size()
-
 	h := sha256.New()
 	var written int64
+	var eofHex string
 
 	for {
 		if ctx.Err() != nil {
-			prog <- models.Prog{Err: ctx.Err()}
+			retErr = ctx.Err()
+			prog <- models.Prog{Err: retErr}
 			return
 		}
+
 		msg, rerr := stream.Recv()
 		if rerr == io.EOF {
 			break
 		}
 		if rerr != nil {
-			// красиво покажем gRPC статус
 			if st, ok := status.FromError(rerr); ok {
-				prog <- models.Prog{Err: fmt.Errorf("recv: %s", st.Message())}
+				retErr = fmt.Errorf("recv: %s", st.Message())
+			} else {
+				retErr = fmt.Errorf("recv: %w", rerr)
+			}
+			prog <- models.Prog{Err: retErr}
+			return
+		}
+
+		if e := msg.GetEof(); e != nil {
+			eofHex = strings.ToLower(strings.TrimSpace(e.GetSha256Hex()))
+			continue
+		}
+		if ch := msg.GetChunk(); ch != nil {
+			n, werr := out.Write(ch.Content)
+			if werr != nil {
+				retErr = fmt.Errorf("write: %w", werr)
+				prog <- models.Prog{Err: retErr}
 				return
 			}
-			prog <- models.Prog{Err: fmt.Errorf("recv: %w", rerr)}
-			return
+			written += int64(n)
+			select {
+			case prog <- models.Prog{Done: written, Total: total}:
+			default:
+			}
+			_, _ = h.Write(ch.Content)
+			continue
 		}
 
-		ch := msg.GetChunk()
-		if ch == nil {
-			prog <- models.Prog{Err: errors.New("unexpected message: want FileChunk")}
-			return
-		}
-
-		n, werr := out.Write(ch.Content)
-		if werr != nil {
-			prog <- models.Prog{Err: fmt.Errorf("write: %w", werr)}
-			return
-		}
-		written += int64(n)
-		select {
-		case prog <- models.Prog{Done: written, Total: total}:
-		default: // не блокируем UI, если буфер заполнен
-		}
-		_, _ = h.Write(ch.Content)
+		retErr = errors.New("unexpected message: want chunk or eof")
+		prog <- models.Prog{Err: retErr}
+		return
 	}
 
-	// 4) fsync → close → rename
+	gotHex := strings.ToLower(hex.EncodeToString(h.Sum(nil)))
+
+	if eofHex == "" {
+		retErr = errors.New("missing EOF sha256 from server")
+		prog <- models.Prog{Err: retErr}
+		return
+	}
+	if !strings.EqualFold(gotHex, eofHex) {
+		retErr = fmt.Errorf("sha256 mismatch: got %s, want %s", gotHex, eofHex)
+		prog <- models.Prog{Err: retErr}
+		return
+	}
+	if total > 0 && written != total {
+		retErr = fmt.Errorf("size mismatch: got %d, want %d", written, total)
+		prog <- models.Prog{Err: retErr}
+		return
+	}
+
 	if err := out.Sync(); err != nil {
-		prog <- models.Prog{Err: fmt.Errorf("sync: %w", err)}
+		retErr = fmt.Errorf("sync: %w", err)
+		prog <- models.Prog{Err: retErr}
 		return
 	}
 	if err := out.Close(); err != nil {
-		prog <- models.Prog{Err: fmt.Errorf("close: %w", err)}
+		retErr = fmt.Errorf("close: %w", err)
+		prog <- models.Prog{Err: retErr}
 		return
 	}
 	if err := os.Rename(tmpPath, finalPath); err != nil {
-		prog <- models.Prog{Err: fmt.Errorf("rename: %w", err)}
-		return
-	}
-
-	// 5) сверим размер (если сервер прислал size)
-	if info.Size > 0 && written != info.Size {
-		prog <- models.Prog{Err: fmt.Errorf("size mismatch: got %d, want %d", written, info.Size)}
+		retErr = fmt.Errorf("rename: %w", err)
+		prog <- models.Prog{Err: retErr}
 		return
 	}
 }

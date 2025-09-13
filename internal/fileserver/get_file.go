@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/google/uuid"
 
@@ -58,7 +57,7 @@ func (s *Service) DownloadFile(DownloadFileRequest *filev1.DownloadFileRequest, 
 	err = stream.Send(&filev1.DownloadFileResponse{
 		Payload: &filev1.DownloadFileResponse_Info{
 			Info: &filev1.FileInfo{
-				Filename: filepath.Base(path),
+				Filename: u.Filename,
 				Size:     stat.Size(),
 			},
 		},
@@ -93,19 +92,26 @@ func (s *Service) DownloadFile(DownloadFileRequest *filev1.DownloadFileRequest, 
 			}
 		}
 		if rerr == io.EOF {
-			break
+			if err := stream.Send(&filev1.DownloadFileResponse{
+				Payload: &filev1.DownloadFileResponse_Eof{
+					Eof: &filev1.FileEof{Sha256Hex: hex.EncodeToString(h.Sum(nil))},
+				},
+			}); err != nil {
+				return err
+			}
+
+			// 3) закрываем отправку и получаем ответ
+			log.Info("download done",
+				"file", u.Path,
+				"bytes", u.SizeBytes,
+				"sha256", hex.EncodeToString(h.Sum(nil)),
+			)
+			return nil
 		}
 		if rerr != nil {
 			return status.Errorf(codes.Internal, "read: %v", rerr)
 		}
 	}
 
-	// 3) закрываем отправку и получаем ответ
-	log.Info("download done",
-		"file", u.Path,
-		"bytes", u.SizeBytes,
-		"sha256", hex.EncodeToString(h.Sum(nil)),
-	)
 	return nil
-
 }

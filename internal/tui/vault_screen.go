@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	commonv1 "github.com/rtmelsov/adv-keeper/gen/go/proto/common/v1"
@@ -93,11 +92,13 @@ func (m TuiModel) VaultAction(msg string) (tea.Model, tea.Cmd) {
 		} else if m.SelectedFile != "" {
 			m.Loading = true
 			m.StreamLoading = true
+			fileData := m.SelectedFile
+			m.SelectedFile = ""
 			return m, tea.Batch(
 				m.Spin.Tick,
 				func() tea.Msg {
 					ch := make(chan models.Prog, 32)
-					go akclient.UploadFile(m.SelectedFile, ch)
+					go akclient.UploadFile(fileData, ch)
 					return progressChanReadyMsg{ch: ch, Kind: OpUpload}
 				},
 			)
@@ -108,28 +109,37 @@ func (m TuiModel) VaultAction(msg string) (tea.Model, tea.Cmd) {
 
 func (m TuiModel) Vault() string {
 
-	s := ui.Title.Render("try to add some file\n\n")
-	if m.OpenFilePicker {
-		return lipgloss.JoinVertical(
-			lipgloss.Top,
-			s,
-			m.FilePicker.View(),
-		)
-	} else if m.SelectedFile != "" {
-		return lipgloss.JoinVertical(
-			lipgloss.Top,
-			s,
-			ui.Title.Render(fmt.Sprintf("\nВы выбрали файл: %s\n", m.SelectedFile)),
-		)
-	} else {
-		btn := ui.ButtonInactive.Render("ADD FILE")
-		if m.HorCursor == 1 {
-			btn = ui.ButtonActive.Render("ADD FILE")
+	s := ""
+	btn := ""
+
+	if m.SelectedFile != "" {
+		s = ui.Title.Render(fmt.Sprintf("Вы выбрали: %s \nХотите отправить?\n", m.SelectedFile))
+		if m.OpenFilePicker {
+			return lipgloss.JoinVertical(
+				lipgloss.Top,
+				s,
+				m.FilePicker.View(),
+			)
 		}
-		return lipgloss.JoinVertical(
-			lipgloss.Top,
-			s,
-			btn,
-		)
+		btn = ui.ButtonActive.Render("Отправить файл")
+	} else {
+		s = ui.Title.Render("Попробуй добавить файл\n\n")
+		if m.OpenFilePicker {
+			return lipgloss.JoinVertical(
+				lipgloss.Top,
+				s,
+				m.FilePicker.View(),
+			)
+		}
+		btn = ui.ButtonInactive.Render("Отправить файл")
+		if m.HorCursor == 1 {
+			btn = ui.ButtonActive.Render("Прикрепить файл")
+		}
 	}
+
+	return lipgloss.JoinVertical(
+		lipgloss.Top,
+		s,
+		btn,
+	)
 }
